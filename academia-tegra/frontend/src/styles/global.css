@@ -1,0 +1,159 @@
+:root {
+  --cor-primaria: #4f46e5;
+  --cor-primaria-escura: #3730a3;
+  --cor-fundo: #f5f6fa;
+  --cor-texto: #1a1a2e;
+  --cor-borda: #e2e2ea;
+  --cor-erro: #dc2626;
+  --cor-sucesso: #16a34a;
+  --radius: 10px;
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+  background: var(--cor-fundo);
+  color: var(--cor-texto);
+}
+
+a { color: var(--cor-primaria); text-decoration: none; }
+
+button {
+  cursor: pointer;
+  font-family: inherit;
+}
+
+.btn {
+  background: var(--cor-primaria);
+  color: #fff;
+  border: none;
+  padding: 10px 18px;
+  border-radius: var(--radius);
+  font-size: 14px;
+  font-weight: 600;
+  transition: background 0.15s;
+}
+.btn:hover { background: var(--cor-primaria-escura); }
+.btn:disabled { opacity: 0.6; cursor: not-allowed; }
+.btn-secundario { background: #fff; color: var(--cor-primaria); border: 1px solid var(--cor-primaria); }
+.btn-perigo { background: var(--cor-erro); }
+.btn-link { background: none; color: var(--cor-primaria); padding: 0; font-weight: 500; }
+
+.campo { margin-bottom: 16px; display: flex; flex-direction: column; gap: 6px; }
+.campo label { font-size: 13px; font-weight: 600; color: #444; }
+.campo input, .campo select, .campo textarea {
+  padding: 10px 12px;
+  border: 1px solid var(--cor-borda);
+  border-radius: var(--radius);
+  font-size: 14px;
+}
+.campo input:focus, .campo select:focus, .campo textarea:focus {
+  outline: none;
+  border-color: var(--cor-primaria);
+}
+
+.card {
+  background: #fff;
+  border-radius: var(--radius);
+  border: 1px solid var(--cor-borda);
+  padding: 20px;
+}
+
+.erro { color: var(--cor-erro); font-size: 13px; }
+.sucesso { color: var(--cor-sucesso); font-size: 13px; }
+
+.layout { display: flex; min-height: 100vh; }
+.sidebar {
+  width: 220px;
+  background: #1a1a2e;
+  color: #fff;
+  padding: 20px 0;
+  flex-shrink: 0;
+}
+.sidebar h1 { font-size: 18px; padding: 0 20px 20px; margin: 0; }
+.sidebar nav a, .sidebar nav button {
+  display: block;
+  width: 100%;
+  text-align: left;
+  padding: 12px 20px;
+  color: #d1d1e0;
+  background: none;
+  border: none;
+  font-size: 14px;
+}
+.sidebar nav a:hover, .sidebar nav a.ativo, .sidebar nav button:hover {
+  background: rgba(255,255,255,0.08);
+  color: #fff;
+}
+.conteudo { flex: 1; padding: 28px; max-width: 1200px; }
+
+.tela-auth {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.tela-auth .card { width: 380px; }
+.tela-auth h1 { text-align: center; margin-bottom: 4px; }
+.tela-auth p.sub { text-align: center; color: #777; margin-top: 0; margin-bottom: 24px; font-size: 14px; }
+
+table { width: 100%; border-collapse: collapse; }
+th, td { text-align: left; padding: 10px 12px; border-bottom: 1px solid var(--cor-borda); font-size: 14px; }
+th { font-size: 12px; text-transform: uppercase; color: #888; }
+
+.badge {
+  display: inline-block;
+  padding: 3px 10px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.calendario { display: grid; grid-template-columns: repeat(7, 1fr); gap: 6px; }
+.calendario .cab { font-size: 12px; font-weight: 600; color: #777; text-align: center; padding-bottom: 6px; }
+.dia-celula {
+  min-height: 100px;
+  border: 1px solid var(--cor-borda);
+  border-radius: 8px;
+  background: #fff;
+  padding: 6px;
+  font-size: 12px;
+}
+.dia-celula .num-dia { font-weight: 600; margin-bottom: 4px; }
+.dia-celula.fora-mes { background: #fafafa; color: #ccc; }
+.evento-chip {
+  border-radius: 5px;
+  padding: 2px 6px;
+  margin-bottom: 3px;
+  color: #fff;
+  font-size: 11px;
+  cursor: pointer;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.modal-fundo {
+  position: fixed; inset: 0;
+  background: rgba(0,0,0,0.45);
+  display: flex; align-items: center; justify-content: center;
+  z-index: 50;
+  padding: 20px;
+}
+.modal-caixa {
+  background: #fff;
+  border-radius: var(--radius);
+  padding: 24px;
+  width: 100%;
+  max-width: 520px;
+  max-height: 90vh;
+  overflow-y: auto;
+}
+
+.topo-pagina { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; }
+.filtros { display: flex; gap: 10px; margin-bottom: 16px; flex-wrap: wrap; }
+.filtros select, .filtros input { padding: 8px 10px; border-radius: 8px; border: 1px solid var(--cor-borda); }
+
+.grade-cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 14px; }

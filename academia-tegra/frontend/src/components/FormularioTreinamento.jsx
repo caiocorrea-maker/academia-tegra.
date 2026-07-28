@@ -1,0 +1,126 @@
+import { useEffect, useState } from 'react';
+import api from '../services/api';
+import FormularioProva from './FormularioProva';
+
+export default function FormularioTreinamento({ produtos, aoCriar, aoFechar }) {
+  const [produtoId, setProdutoId] = useState('');
+  const [data, setData] = useState('');
+  const [horario, setHorario] = useState('');
+  const [tema, setTema] = useState('');
+  const [plano, setPlano] = useState('');
+  const [temProva, setTemProva] = useState(true);
+  const [provaId, setProvaId] = useState('');
+  const [provasDisponiveis, setProvasDisponiveis] = useState([]);
+  const [mostrarFormProva, setMostrarFormProva] = useState(false);
+  const [erro, setErro] = useState('');
+  const [salvando, setSalvando] = useState(false);
+
+  useEffect(() => {
+    if (!produtoId) { setProvasDisponiveis([]); return; }
+    api.get('/provas/modelos', { params: { produtoId } }).then((res) => setProvasDisponiveis(res.data));
+  }, [produtoId]);
+
+  async function salvar(e) {
+    e.preventDefault();
+    setErro('');
+    if (temProva && !provaId) {
+      setErro('Selecione uma prova do banco ou cadastre uma nova.');
+      return;
+    }
+    setSalvando(true);
+    try {
+      const res = await api.post('/treinamentos', {
+        produtoId, data, horario, tema,
+        planoTreinamento: plano,
+        temProva,
+        provaId: temProva ? provaId : null,
+      });
+      aoCriar(res.data);
+    } catch (err) {
+      setErro(err.response?.data?.erro || 'Não foi possível salvar o treinamento.');
+    } finally {
+      setSalvando(false);
+    }
+  }
+
+  return (
+    <div className="modal-fundo" onClick={aoFechar}>
+      <div className="modal-caixa" onClick={(e) => e.stopPropagation()}>
+        <h2>Novo Treinamento</h2>
+        <form onSubmit={salvar}>
+          <div className="campo">
+            <label>Produto</label>
+            <select value={produtoId} onChange={(e) => { setProdutoId(e.target.value); setProvaId(''); }} required>
+              <option value="">Selecione...</option>
+              {produtos.map((p) => <option key={p.id} value={p.id}>{p.nome}</option>)}
+            </select>
+          </div>
+          <div style={{ display: 'flex', gap: 12 }}>
+            <div className="campo" style={{ flex: 1 }}>
+              <label>Data</label>
+              <input type="date" value={data} onChange={(e) => setData(e.target.value)} required />
+            </div>
+            <div className="campo" style={{ flex: 1 }}>
+              <label>Horário</label>
+              <input type="time" value={horario} onChange={(e) => setHorario(e.target.value)} required />
+            </div>
+          </div>
+          <div className="campo">
+            <label>Tema</label>
+            <input value={tema} onChange={(e) => setTema(e.target.value)} required />
+          </div>
+          <div className="campo">
+            <label>Plano de treinamento</label>
+            <textarea rows={3} value={plano} onChange={(e) => setPlano(e.target.value)} required />
+          </div>
+
+          <div className="campo">
+            <label>
+              <input type="checkbox" checked={temProva} onChange={(e) => setTemProva(e.target.checked)} style={{ marginRight: 6 }} />
+              Este treinamento terá prova
+            </label>
+          </div>
+
+          {temProva && (
+            <div className="campo">
+              <label>Prova (banco reutilizável do produto)</label>
+              <select value={provaId} onChange={(e) => setProvaId(e.target.value)} disabled={!produtoId}>
+                <option value="">Selecione uma prova...</option>
+                {provasDisponiveis.map((p) => <option key={p.id} value={p.id}>{p.titulo}</option>)}
+              </select>
+              {produtoId && (
+                <button type="button" className="btn-link" onClick={() => setMostrarFormProva(true)} style={{ marginTop: 6, textAlign: 'left' }}>
+                  + Cadastrar nova prova para este produto
+                </button>
+              )}
+            </div>
+          )}
+
+          {!temProva && (
+            <p style={{ fontSize: 13, color: '#666' }}>
+              Sem prova: será gerado um QR Code/Link único para confirmação de presença (válido por 1h após a liberação).
+            </p>
+          )}
+
+          {erro && <p className="erro">{erro}</p>}
+          <div style={{ display: 'flex', gap: 8 }}>
+            <button className="btn" type="submit" disabled={salvando}>{salvando ? 'Salvando...' : 'Salvar treinamento'}</button>
+            <button className="btn btn-secundario" type="button" onClick={aoFechar}>Cancelar</button>
+          </div>
+        </form>
+
+        {mostrarFormProva && (
+          <FormularioProva
+            produtoId={produtoId}
+            aoFechar={() => setMostrarFormProva(false)}
+            aoCriar={(prova) => {
+              setProvasDisponiveis((ps) => [...ps, prova]);
+              setProvaId(prova.id);
+              setMostrarFormProva(false);
+            }}
+          />
+        )}
+      </div>
+    </div>
+  );
+}

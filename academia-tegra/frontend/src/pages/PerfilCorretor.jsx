@@ -1,0 +1,96 @@
+import { useEffect, useState } from 'react';
+import { useParams } from 'react-router-dom';
+import Layout from '../components/Layout';
+import { useAuth } from '../context/AuthContext';
+import { formatarCPF } from '../utils/formatadores';
+import api from '../services/api';
+
+export default function PerfilCorretor() {
+  const { id } = useParams();
+  const { usuario } = useAuth();
+  const [dados, setDados] = useState(null);
+  const [editando, setEditando] = useState(false);
+  const [form, setForm] = useState({ nome: '', email: '', senha: '' });
+  const [mensagem, setMensagem] = useState('');
+  const [erro, setErro] = useState('');
+
+  const ehProprioPerfil = usuario.perfil === 'CORRETOR' && usuario.id === id;
+
+  async function carregar() {
+    const res = await api.get(`/corretores/${id}`);
+    setDados(res.data);
+    setForm({ nome: res.data.nome, email: res.data.email, senha: '' });
+  }
+
+  useEffect(() => { carregar(); }, [id]);
+
+  async function salvar(e) {
+    e.preventDefault();
+    setErro(''); setMensagem('');
+    try {
+      const payload = { nome: form.nome, email: form.email };
+      if (form.senha) payload.senha = form.senha;
+      await api.put('/corretores/perfil/me', payload);
+      setMensagem('Dados atualizados com sucesso.');
+      setEditando(false);
+      carregar();
+    } catch (err) {
+      setErro(err.response?.data?.erro || 'Não foi possível salvar.');
+    }
+  }
+
+  if (!dados) return <Layout><p>Carregando...</p></Layout>;
+
+  return (
+    <Layout>
+      <h2>Perfil do Corretor</h2>
+
+      <div className="card" style={{ marginBottom: 20 }}>
+        {!editando ? (
+          <>
+            <p><strong>Nome:</strong> {dados.nome}</p>
+            <p><strong>CPF:</strong> {formatarCPF(dados.cpf)}</p>
+            <p><strong>E-mail:</strong> {dados.email}</p>
+            <p><strong>Empresa:</strong> {dados.empresa?.nome}</p>
+            {ehProprioPerfil && <button className="btn btn-secundario" onClick={() => setEditando(true)}>Editar meus dados</button>}
+          </>
+        ) : (
+          <form onSubmit={salvar}>
+            <div className="campo">
+              <label>Nome</label>
+              <input value={form.nome} onChange={(e) => setForm((f) => ({ ...f, nome: e.target.value }))} required />
+            </div>
+            <div className="campo">
+              <label>E-mail</label>
+              <input type="email" value={form.email} onChange={(e) => setForm((f) => ({ ...f, email: e.target.value }))} required />
+            </div>
+            <div className="campo">
+              <label>Nova senha (deixe em branco para não alterar)</label>
+              <input type="password" value={form.senha} onChange={(e) => setForm((f) => ({ ...f, senha: e.target.value }))} minLength={6} />
+            </div>
+            {erro && <p className="erro">{erro}</p>}
+            <div style={{ display: 'flex', gap: 8 }}>
+              <button className="btn" type="submit">Salvar</button>
+              <button className="btn btn-secundario" type="button" onClick={() => setEditando(false)}>Cancelar</button>
+            </div>
+          </form>
+        )}
+        {mensagem && <p className="sucesso">{mensagem}</p>}
+      </div>
+
+      <h3>Certificados</h3>
+      <div className="grade-cards">
+        {dados.certificados.map((c) => (
+          <div key={c.id} className="card">
+            <strong>{c.treinamento.produto.nome}</strong>
+            <p style={{ fontSize: 13, margin: '4px 0' }}>{c.treinamento.tema}</p>
+            <p style={{ fontSize: 13, margin: '4px 0' }}>Aproveitamento: {c.percentual.toFixed(0)}%</p>
+            <p style={{ fontSize: 12, color: '#888' }}>{new Date(c.emitidoEm).toLocaleDateString('pt-BR')}</p>
+            <a href={c.urlArquivo} target="_blank" rel="noreferrer" className="btn-link">Ver certificado</a>
+          </div>
+        ))}
+        {dados.certificados.length === 0 && <p style={{ color: '#888' }}>Nenhum certificado emitido ainda.</p>}
+      </div>
+    </Layout>
+  );
+}
