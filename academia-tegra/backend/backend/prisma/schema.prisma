@@ -1,0 +1,244 @@
+// Academia Tegra - Schema do banco de dados
+// PostgreSQL + Prisma ORM
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Perfil {
+  ADMIN
+  SUPERVISOR
+  CORRETOR
+}
+
+model Usuario {
+  id            String   @id @default(uuid())
+  nome          String
+  email         String   @unique
+  senhaHash     String
+  perfil        Perfil
+  ativo         Boolean  @default(true)
+  criadoEm      DateTime @default(now())
+  atualizadoEm  DateTime @updatedAt
+
+  // Somente para CORRETOR
+  cpf           String?  @unique
+  empresaId     String?
+  empresa       EmpresaVenda? @relation(fields: [empresaId], references: [id])
+
+  // Relações
+  produtosVinculados   ProdutoSupervisor[]      // Somente SUPERVISOR
+  treinamentosCriados  Treinamento[]            @relation("TreinamentosCriadosPor")
+  interesses           InteresseTreinamento[]
+  presencas            Presenca[]
+  tentativasProva      TentativaProva[]
+  certificados         Certificado[]
+  resetTokens          PasswordResetToken[]
+
+  @@index([perfil])
+  @@index([empresaId])
+}
+
+model PasswordResetToken {
+  id         String   @id @default(uuid())
+  token      String   @unique
+  usuarioId  String
+  usuario    Usuario  @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
+  expiraEm   DateTime
+  usado      Boolean  @default(false)
+  criadoEm   DateTime @default(now())
+}
+
+model EmpresaVenda {
+  id         String    @id @default(uuid())
+  nome       String    @unique
+  ativo      Boolean   @default(true)
+  criadoEm   DateTime  @default(now())
+  corretores Usuario[]
+}
+
+model Produto {
+  id            String   @id @default(uuid())
+  nome          String
+  corCalendario String   // hex color, ex: #FF5733
+  ativo         Boolean  @default(true)
+  criadoEm      DateTime @default(now())
+
+  supervisores   ProdutoSupervisor[]
+  treinamentos   Treinamento[]
+  provasModelo   ProvaModelo[]
+}
+
+// Tabela associativa: quais produtos cada supervisor gerencia
+model ProdutoSupervisor {
+  id           String   @id @default(uuid())
+  produtoId    String
+  supervisorId String
+  produto      Produto  @relation(fields: [produtoId], references: [id], onDelete: Cascade)
+  supervisor   Usuario  @relation(fields: [supervisorId], references: [id], onDelete: Cascade)
+
+  @@unique([produtoId, supervisorId])
+}
+
+enum StatusTreinamento {
+  AGENDADO
+  REALIZADO
+  CANCELADO
+}
+
+model Treinamento {
+  id                String    @id @default(uuid())
+  produtoId         String
+  produto           Produto   @relation(fields: [produtoId], references: [id])
+  supervisorId      String
+  supervisor        Usuario   @relation("TreinamentosCriadosPor", fields: [supervisorId], references: [id])
+
+  data              DateTime  // data do treinamento
+  horario           String    // ex: "14:30"
+  tema              String
+  planoTreinamento  String    @db.Text
+  formato           String    @default("PRESENCIAL")
+  status            StatusTreinamento @default(AGENDADO)
+
+  temProva          Boolean   @default(true)
+  provaId           String?
+  prova             ProvaModelo? @relation(fields: [provaId], references: [id])
+
+  // Controle de liberação da prova / QR de presença
+  liberadoEm        DateTime?
+  liberadoExpiraEm  DateTime? // liberadoEm + 1h
+  qrToken           String?   @unique // usado tanto para prova quanto para presença sem prova
+
+  criadoEm          DateTime  @default(now())
+  atualizadoEm      DateTime  @updatedAt
+
+  evidencias        Evidencia[]
+  interesses        InteresseTreinamento[]
+  presencas         Presenca[]
+  tentativasProva   TentativaProva[]
+  certificados      Certificado[]
+
+  @@index([produtoId])
+  @@index([supervisorId])
+  @@index([data])
+}
+
+model Evidencia {
+  id             String      @id @default(uuid())
+  treinamentoId  String
+  treinamento    Treinamento @relation(fields: [treinamentoId], references: [id], onDelete: Cascade)
+  urlArquivo     String      // chave/URL no bucket S3-compatível
+  nomeArquivo    String
+  tipo           String      // image/png, image/jpeg
+  enviadoEm      DateTime    @default(now())
+}
+
+model InteresseTreinamento {
+  id             String      @id @default(uuid())
+  treinamentoId  String
+  treinamento    Treinamento @relation(fields: [treinamentoId], references: [id], onDelete: Cascade)
+  corretorId     String
+  corretor       Usuario     @relation(fields: [corretorId], references: [id], onDelete: Cascade)
+  criadoEm       DateTime    @default(now())
+  cancelado      Boolean     @default(false)
+
+  @@unique([treinamentoId, corretorId])
+}
+
+// Presença confirmada quando NÃO há prova (via QR/link)
+model Presenca {
+  id             String      @id @default(uuid())
+  treinamentoId  String
+  treinamento    Treinamento @relation(fields: [treinamentoId], references: [id], onDelete: Cascade)
+  corretorId     String
+  corretor       Usuario     @relation(fields: [corretorId], references: [id], onDelete: Cascade)
+  confirmadoEm   DateTime    @default(now())
+
+  @@unique([treinamentoId, corretorId])
+}
+
+// Modelo de prova reutilizável, vinculado a um produto
+model ProvaModelo {
+  id           String       @id @default(uuid())
+  titulo       String
+  produtoId    String
+  produto      Produto      @relation(fields: [produtoId], references: [id])
+  criadoPorId  String
+  criadoEm     DateTime     @default(now())
+
+  questoes     Questao[]
+  treinamentos Treinamento[]
+}
+
+model Questao {
+  id             String      @id @default(uuid())
+  provaModeloId  String
+  provaModelo    ProvaModelo @relation(fields: [provaModeloId], references: [id], onDelete: Cascade)
+  enunciado      String      @db.Text
+  ordem          Int
+
+  alternativas   Alternativa[]
+}
+
+model Alternativa {
+  id          String   @id @default(uuid())
+  questaoId   String
+  questao     Questao  @relation(fields: [questaoId], references: [id], onDelete: Cascade)
+  texto       String
+  correta     Boolean  @default(false)
+  ordem       Int
+}
+
+enum StatusTentativa {
+  EM_ANDAMENTO
+  CONCLUIDA
+  EXPIRADA
+}
+
+model TentativaProva {
+  id             String          @id @default(uuid())
+  treinamentoId  String
+  treinamento    Treinamento     @relation(fields: [treinamentoId], references: [id], onDelete: Cascade)
+  corretorId     String
+  corretor       Usuario         @relation(fields: [corretorId], references: [id], onDelete: Cascade)
+
+  iniciadoEm     DateTime        @default(now())
+  concluidoEm    DateTime?
+  status         StatusTentativa @default(EM_ANDAMENTO)
+
+  acertos        Int?
+  totalQuestoes  Int?
+  percentual     Float?
+  aprovado       Boolean?
+
+  respostas      Resposta[]
+
+  @@unique([treinamentoId, corretorId])
+}
+
+model Resposta {
+  id               String         @id @default(uuid())
+  tentativaId      String
+  tentativa        TentativaProva @relation(fields: [tentativaId], references: [id], onDelete: Cascade)
+  questaoId        String
+  alternativaId    String
+}
+
+model Certificado {
+  id             String      @id @default(uuid())
+  treinamentoId  String
+  treinamento    Treinamento @relation(fields: [treinamentoId], references: [id])
+  corretorId     String
+  corretor       Usuario     @relation(fields: [corretorId], references: [id])
+
+  urlArquivo     String      // chave/URL do PDF no bucket
+  percentual     Float
+  emitidoEm      DateTime    @default(now())
+
+  @@unique([treinamentoId, corretorId])
+}
