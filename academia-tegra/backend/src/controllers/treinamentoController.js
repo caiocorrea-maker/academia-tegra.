@@ -182,6 +182,12 @@ async function criar(req, res) {
     if (!supervisor || supervisor.perfil !== 'SUPERVISOR' || !supervisor.ativo) {
       throw new HttpError(400, 'Supervisor indicado é inválido.');
     }
+    // Mesma regra do supervisor: o admin não pode vincular um treinamento a um produto
+    // que o supervisor escolhido não gerencia.
+    const vinculado = await prisma.produtoSupervisor.findUnique({
+      where: { produtoId_supervisorId: { produtoId: dados.produtoId, supervisorId: dados.supervisorId } },
+    });
+    if (!vinculado) throw new HttpError(400, 'O supervisor indicado não está vinculado a este produto.');
     supervisorId = dados.supervisorId;
   }
 
@@ -222,7 +228,24 @@ async function editar(req, res) {
     if (!supervisor || supervisor.perfil !== 'SUPERVISOR' || !supervisor.ativo) {
       throw new HttpError(400, 'Supervisor indicado é inválido.');
     }
+    // Produto final = o novo produto informado (se houver) ou o produto atual do treinamento
+    const produtoParaValidar = dados.produtoId || treinamento.produtoId;
+    const vinculado = await prisma.produtoSupervisor.findUnique({
+      where: { produtoId_supervisorId: { produtoId: produtoParaValidar, supervisorId: dados.supervisorId } },
+    });
+    if (!vinculado) throw new HttpError(400, 'O supervisor indicado não está vinculado a este produto.');
     novoSupervisorId = dados.supervisorId;
+  } else if (dados.produtoId && req.usuario.perfil === 'ADMIN') {
+    // Admin trocou só o produto, sem indicar novo supervisor: valida contra o supervisor atual do treinamento
+    const vinculado = await prisma.produtoSupervisor.findUnique({
+      where: { produtoId_supervisorId: { produtoId: dados.produtoId, supervisorId: treinamento.supervisorId } },
+    });
+    if (!vinculado) throw new HttpError(400, 'O supervisor deste treinamento não está vinculado ao produto escolhido. Indique também um supervisor compatível.');
+  } else if (dados.produtoId && req.usuario.perfil === 'SUPERVISOR') {
+    const vinculado = await prisma.produtoSupervisor.findUnique({
+      where: { produtoId_supervisorId: { produtoId: dados.produtoId, supervisorId: req.usuario.id } },
+    });
+    if (!vinculado) throw new HttpError(403, 'Você não está vinculado a este produto.');
   }
 
   const atualizado = await prisma.treinamento.update({
