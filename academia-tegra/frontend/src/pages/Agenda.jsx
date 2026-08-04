@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useState } from 'react';
 import Layout from '../components/Layout';
 import TreinamentoModal from '../components/TreinamentoModal';
+import FormularioTreinamento from '../components/FormularioTreinamento';
+import { useAuth } from '../context/AuthContext';
 import api from '../services/api';
 
 const NOMES_MES = [
@@ -10,14 +12,18 @@ const NOMES_MES = [
 const DIAS_SEMANA = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'];
 
 export default function Agenda() {
+  const { usuario } = useAuth();
   const hoje = new Date();
   const [ano, setAno] = useState(hoje.getFullYear());
   const [mes, setMes] = useState(hoje.getMonth()); // 0-indexed
   const [eventos, setEventos] = useState([]);
   const [treinamentoSelecionado, setTreinamentoSelecionado] = useState(null);
+  const [produtos, setProdutos] = useState([]);
+  const [dataParaCriar, setDataParaCriar] = useState(null);
+
+  const podeGerenciar = usuario.perfil === 'ADMIN' || usuario.perfil === 'SUPERVISOR';
 
   const primeiroDiaMes = new Date(ano, mes, 1);
-  const ultimoDiaMes = new Date(ano, mes + 1, 0);
 
   async function carregarEventos() {
     const inicio = new Date(ano, mes, 1).toISOString();
@@ -27,6 +33,9 @@ export default function Agenda() {
   }
 
   useEffect(() => { carregarEventos(); }, [ano, mes]);
+  useEffect(() => {
+    if (podeGerenciar) api.get('/produtos').then((res) => setProdutos(res.data));
+  }, [podeGerenciar]);
 
   const celulas = useMemo(() => {
     const inicioGrade = new Date(primeiroDiaMes);
@@ -49,6 +58,18 @@ export default function Agenda() {
         dataEvento.getDate() === data.getDate()
       );
     });
+  }
+
+  function formatarDataParaInput(data) {
+    const ano = data.getFullYear();
+    const mes = String(data.getMonth() + 1).padStart(2, '0');
+    const dia = String(data.getDate()).padStart(2, '0');
+    return `${ano}-${mes}-${dia}`;
+  }
+
+  function clicarDia(data) {
+    if (!podeGerenciar) return;
+    setDataParaCriar(formatarDataParaInput(data));
   }
 
   function mesAnterior() {
@@ -76,20 +97,31 @@ export default function Agenda() {
         </div>
       </div>
 
+      {podeGerenciar && (
+        <p style={{ fontSize: 13, color: '#888', marginTop: -10, marginBottom: 14 }}>
+          Dica: clique em um dia vazio do calendário para agendar um novo treinamento nessa data.
+        </p>
+      )}
+
       <div className="calendario">
         {DIAS_SEMANA.map((d) => <div className="cab" key={d}>{d}</div>)}
         {celulas.map((data, i) => {
           const foraMes = data.getMonth() !== mes;
           const evs = eventosDoDia(data);
           return (
-            <div key={i} className={`dia-celula ${foraMes ? 'fora-mes' : ''}`}>
+            <div
+              key={i}
+              className={`dia-celula ${foraMes ? 'fora-mes' : ''}`}
+              style={{ cursor: podeGerenciar ? 'pointer' : 'default' }}
+              onClick={() => clicarDia(data)}
+            >
               <div className="num-dia">{data.getDate()}</div>
               {evs.map((e) => (
                 <div
                   key={e.id}
                   className="evento-chip"
                   style={{ background: e.produto.corCalendario }}
-                  onClick={() => setTreinamentoSelecionado(e.id)}
+                  onClick={(ev) => { ev.stopPropagation(); setTreinamentoSelecionado(e.id); }}
                   title={`${e.tema} - ${e.horario}`}
                 >
                   {e.horario} {e.produto.nome}
@@ -105,6 +137,18 @@ export default function Agenda() {
           treinamentoId={treinamentoSelecionado}
           aoFechar={() => setTreinamentoSelecionado(null)}
           aoAtualizar={carregarEventos}
+        />
+      )}
+
+      {dataParaCriar && (
+        <FormularioTreinamento
+          produtos={produtos}
+          dataInicial={dataParaCriar}
+          aoFechar={() => setDataParaCriar(null)}
+          aoSalvar={() => {
+            setDataParaCriar(null);
+            carregarEventos();
+          }}
         />
       )}
     </Layout>

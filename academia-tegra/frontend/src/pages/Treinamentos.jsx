@@ -102,7 +102,7 @@ export default function Treinamentos() {
         <FormularioTreinamento
           produtos={produtos}
           aoFechar={() => setMostrarForm(false)}
-          aoCriar={() => { setMostrarForm(false); carregarHistorico(); }}
+          aoSalvar={() => { setMostrarForm(false); carregarHistorico(); }}
         />
       )}
 

@@ -1,19 +1,33 @@
 import { useEffect, useState } from 'react';
 import api from '../services/api';
+import { useAuth } from '../context/AuthContext';
 import FormularioProva from './FormularioProva';
 
-export default function FormularioTreinamento({ produtos, aoCriar, aoFechar }) {
-  const [produtoId, setProdutoId] = useState('');
-  const [data, setData] = useState('');
-  const [horario, setHorario] = useState('');
-  const [tema, setTema] = useState('');
-  const [plano, setPlano] = useState('');
-  const [temProva, setTemProva] = useState(true);
-  const [provaId, setProvaId] = useState('');
+export default function FormularioTreinamento({ produtos, treinamentoExistente, dataInicial, aoSalvar, aoFechar }) {
+  const { usuario } = useAuth();
+  const editando = Boolean(treinamentoExistente);
+
+  const [produtoId, setProdutoId] = useState(treinamentoExistente?.produto?.id || '');
+  const [supervisorId, setSupervisorId] = useState(treinamentoExistente?.supervisor?.id || '');
+  const [supervisores, setSupervisores] = useState([]);
+  const [data, setData] = useState(
+    treinamentoExistente ? new Date(treinamentoExistente.data).toISOString().slice(0, 10) : (dataInicial || '')
+  );
+  const [horario, setHorario] = useState(treinamentoExistente?.horario || '');
+  const [tema, setTema] = useState(treinamentoExistente?.tema || '');
+  const [plano, setPlano] = useState(treinamentoExistente?.planoTreinamento || '');
+  const [temProva, setTemProva] = useState(treinamentoExistente ? treinamentoExistente.temProva : true);
+  const [provaId, setProvaId] = useState(treinamentoExistente?.prova?.id || '');
   const [provasDisponiveis, setProvasDisponiveis] = useState([]);
   const [mostrarFormProva, setMostrarFormProva] = useState(false);
   const [erro, setErro] = useState('');
   const [salvando, setSalvando] = useState(false);
+
+  useEffect(() => {
+    if (usuario.perfil === 'ADMIN') {
+      api.get('/usuarios/supervisores').then((res) => setSupervisores(res.data));
+    }
+  }, [usuario.perfil]);
 
   useEffect(() => {
     if (!produtoId) { setProvasDisponiveis([]); return; }
@@ -29,13 +43,20 @@ export default function FormularioTreinamento({ produtos, aoCriar, aoFechar }) {
     }
     setSalvando(true);
     try {
-      const res = await api.post('/treinamentos', {
+      const payload = {
         produtoId, data, horario, tema,
         planoTreinamento: plano,
         temProva,
         provaId: temProva ? provaId : null,
-      });
-      aoCriar(res.data);
+        ...(usuario.perfil === 'ADMIN' && supervisorId ? { supervisorId } : {}),
+      };
+      if (editando) {
+        const res = await api.put(`/treinamentos/${treinamentoExistente.id}`, payload);
+        aoSalvar(res.data);
+      } else {
+        const res = await api.post('/treinamentos', payload);
+        aoSalvar(res.data);
+      }
     } catch (err) {
       setErro(err.response?.data?.erro || 'Não foi possível salvar o treinamento.');
     } finally {
@@ -46,7 +67,7 @@ export default function FormularioTreinamento({ produtos, aoCriar, aoFechar }) {
   return (
     <div className="modal-fundo" onClick={aoFechar}>
       <div className="modal-caixa" onClick={(e) => e.stopPropagation()}>
-        <h2>Novo Treinamento</h2>
+        <h2>{editando ? 'Editar Treinamento' : 'Novo Treinamento'}</h2>
         <form onSubmit={salvar}>
           <div className="campo">
             <label>Produto</label>
@@ -55,6 +76,17 @@ export default function FormularioTreinamento({ produtos, aoCriar, aoFechar }) {
               {produtos.map((p) => <option key={p.id} value={p.id}>{p.nome}</option>)}
             </select>
           </div>
+
+          {usuario.perfil === 'ADMIN' && (
+            <div className="campo">
+              <label>Supervisor responsável</label>
+              <select value={supervisorId} onChange={(e) => setSupervisorId(e.target.value)} required>
+                <option value="">Selecione...</option>
+                {supervisores.map((s) => <option key={s.id} value={s.id}>{s.nome}</option>)}
+              </select>
+            </div>
+          )}
+
           <div style={{ display: 'flex', gap: 12 }}>
             <div className="campo" style={{ flex: 1 }}>
               <label>Data</label>

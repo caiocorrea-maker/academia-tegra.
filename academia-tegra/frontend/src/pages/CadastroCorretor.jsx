@@ -4,7 +4,7 @@ import api from '../services/api';
 
 export default function CadastroCorretor() {
   const [empresas, setEmpresas] = useState([]);
-  const [form, setForm] = useState({ nome: '', empresaId: '', cpf: '', email: '', senha: '' });
+  const [form, setForm] = useState({ nome: '', empresaId: '', cpf: '', email: '', senha: '', gerente: '', diretor: '' });
   const [erro, setErro] = useState('');
   const [carregando, setCarregando] = useState(false);
   const navigate = useNavigate();
@@ -58,6 +58,14 @@ export default function CadastroCorretor() {
           <div className="campo">
             <label>E-mail</label>
             <input type="email" value={form.email} onChange={(e) => atualizar('email', e.target.value)} required />
+          </div>
+          <div className="campo">
+            <label>Gerente</label>
+            <input value={form.gerente} onChange={(e) => atualizar('gerente', e.target.value)} />
+          </div>
+          <div className="campo">
+            <label>Diretor</label>
+            <input value={form.diretor} onChange={(e) => atualizar('diretor', e.target.value)} />
           </div>
           <div className="campo">
             <label>Senha</label>

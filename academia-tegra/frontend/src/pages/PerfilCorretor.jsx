@@ -10,7 +10,7 @@ export default function PerfilCorretor() {
   const { usuario } = useAuth();
   const [dados, setDados] = useState(null);
   const [editando, setEditando] = useState(false);
-  const [form, setForm] = useState({ nome: '', email: '', senha: '' });
+  const [form, setForm] = useState({ nome: '', email: '', senha: '', gerente: '', diretor: '' });
   const [mensagem, setMensagem] = useState('');
   const [erro, setErro] = useState('');
 
@@ -19,7 +19,7 @@ export default function PerfilCorretor() {
   async function carregar() {
     const res = await api.get(`/corretores/${id}`);
     setDados(res.data);
-    setForm({ nome: res.data.nome, email: res.data.email, senha: '' });
+    setForm({ nome: res.data.nome, email: res.data.email, senha: '', gerente: res.data.gerente || '', diretor: res.data.diretor || '' });
   }
 
   useEffect(() => { carregar(); }, [id]);
@@ -28,7 +28,7 @@ export default function PerfilCorretor() {
     e.preventDefault();
     setErro(''); setMensagem('');
     try {
-      const payload = { nome: form.nome, email: form.email };
+      const payload = { nome: form.nome, email: form.email, gerente: form.gerente, diretor: form.diretor };
       if (form.senha) payload.senha = form.senha;
       await api.put('/corretores/perfil/me', payload);
       setMensagem('Dados atualizados com sucesso.');
@@ -52,6 +52,8 @@ export default function PerfilCorretor() {
             <p><strong>CPF:</strong> {formatarCPF(dados.cpf)}</p>
             <p><strong>E-mail:</strong> {dados.email}</p>
             <p><strong>Empresa:</strong> {dados.empresa?.nome}</p>
+            <p><strong>Gerente:</strong> {dados.gerente || '-'}</p>
+            <p><strong>Diretor:</strong> {dados.diretor || '-'}</p>
             {ehProprioPerfil && <button className="btn btn-secundario" onClick={() => setEditando(true)}>Editar meus dados</button>}
           </>
         ) : (
@@ -63,6 +65,14 @@ export default function PerfilCorretor() {
             <div className="campo">
               <label>E-mail</label>
               <input type="email" value={form.email} onChange={(e) => setForm((f) => ({ ...f, email: e.target.value }))} required />
+            </div>
+            <div className="campo">
+              <label>Gerente</label>
+              <input value={form.gerente} onChange={(e) => setForm((f) => ({ ...f, gerente: e.target.value }))} />
+            </div>
+            <div className="campo">
+              <label>Diretor</label>
+              <input value={form.diretor} onChange={(e) => setForm((f) => ({ ...f, diretor: e.target.value }))} />
             </div>
             <div className="campo">
               <label>Nova senha (deixe em branco para não alterar)</label>

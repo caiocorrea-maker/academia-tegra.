@@ -38,13 +38,23 @@ function AbaUsuarios() {
   const [editando, setEditando] = useState(null);
   const [form, setForm] = useState({ nome: '', email: '', perfil: 'SUPERVISOR', senha: '', produtoIds: [] });
   const [erro, setErro] = useState('');
+  const [busca, setBusca] = useState('');
+  const [filtroPerfil, setFiltroPerfil] = useState('');
+  const [filtroProduto, setFiltroProduto] = useState('');
 
   async function carregar() {
-    const [uRes, pRes] = await Promise.all([api.get('/usuarios/internos'), api.get('/produtos')]);
+    const params = {};
+    if (busca) params.busca = busca;
+    if (filtroPerfil) params.perfil = filtroPerfil;
+    if (filtroProduto) params.produtoId = filtroProduto;
+    const [uRes, pRes] = await Promise.all([
+      api.get('/usuarios/internos', { params }),
+      api.get('/produtos'),
+    ]);
     setUsuarios(uRes.data);
     setProdutos(pRes.data);
   }
-  useEffect(() => { carregar(); }, []);
+  useEffect(() => { carregar(); }, [busca, filtroPerfil, filtroProduto]);
 
   function abrirNovo() {
     setEditando(null);
@@ -89,12 +99,36 @@ function AbaUsuarios() {
     carregar();
   }
 
+  async function excluir(u) {
+    if (!confirm(`Tem certeza que deseja excluir "${u.nome}"? Essa ação não pode ser desfeita.`)) return;
+    try {
+      await api.delete(`/usuarios/internos/${u.id}`);
+      carregar();
+    } catch (err) {
+      alert(err.response?.data?.erro || 'Não foi possível excluir este usuário.');
+    }
+  }
+
   return (
     <div className="card">
       <div className="topo-pagina">
         <h3 style={{ margin: 0 }}>Administradores e Supervisores</h3>
         <button className="btn" onClick={abrirNovo}>+ Novo usuário</button>
       </div>
+
+      <div className="filtros">
+        <input placeholder="Buscar por nome..." value={busca} onChange={(e) => setBusca(e.target.value)} />
+        <select value={filtroPerfil} onChange={(e) => setFiltroPerfil(e.target.value)}>
+          <option value="">Todos os perfis</option>
+          <option value="ADMIN">Administrador</option>
+          <option value="SUPERVISOR">Supervisor</option>
+        </select>
+        <select value={filtroProduto} onChange={(e) => setFiltroProduto(e.target.value)}>
+          <option value="">Todos os produtos</option>
+          {produtos.map((p) => <option key={p.id} value={p.id}>{p.nome}</option>)}
+        </select>
+      </div>
+
       <table>
         <thead><tr><th>Nome</th><th>E-mail</th><th>Perfil</th><th>Produtos</th><th>Status</th><th></th></tr></thead>
         <tbody>
@@ -105,14 +139,18 @@ function AbaUsuarios() {
               <td>{u.perfil}</td>
               <td>{u.produtosVinculados?.map((v) => v.produto.nome).join(', ') || '-'}</td>
               <td>{u.ativo ? 'Ativo' : 'Inativo'}</td>
-              <td style={{ display: 'flex', gap: 8 }}>
+              <td style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
                 <button className="btn-link" onClick={() => abrirEdicao(u)}>Editar</button>
                 <button className="btn-link" style={{ color: '#dc2626' }} onClick={() => alternarAtivo(u)}>
                   {u.ativo ? 'Inativar' : 'Reativar'}
                 </button>
+                <button className="btn-link" style={{ color: '#dc2626' }} onClick={() => excluir(u)}>Excluir</button>
               </td>
             </tr>
           ))}
+          {usuarios.length === 0 && (
+            <tr><td colSpan={6} style={{ textAlign: 'center', color: '#888' }}>Nenhum usuário encontrado.</td></tr>
+          )}
         </tbody>
       </table>
 

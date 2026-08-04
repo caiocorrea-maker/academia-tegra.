@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useAuth } from '../context/AuthContext';
 import api from '../services/api';
+import FormularioTreinamento from './FormularioTreinamento';
 
 export default function TreinamentoModal({ treinamentoId, aoFechar, aoAtualizar }) {
   const { usuario } = useAuth();
@@ -8,6 +9,9 @@ export default function TreinamentoModal({ treinamentoId, aoFechar, aoAtualizar 
   const [carregando, setCarregando] = useState(true);
   const [liberacao, setLiberacao] = useState(null);
   const [erro, setErro] = useState('');
+  const [editando, setEditando] = useState(false);
+  const [produtos, setProdutos] = useState([]);
+  const [excluindo, setExcluindo] = useState(false);
 
   async function carregar() {
     setCarregando(true);
@@ -68,7 +72,44 @@ export default function TreinamentoModal({ treinamentoId, aoFechar, aoAtualizar 
     }
   }
 
+  async function abrirEdicao() {
+    if (produtos.length === 0) {
+      const res = await api.get('/produtos');
+      setProdutos(res.data);
+    }
+    setEditando(true);
+  }
+
+  async function excluirTreinamento() {
+    if (!confirm(`Tem certeza que deseja excluir o treinamento "${dados.tema}"? Essa ação não pode ser desfeita.`)) return;
+    setExcluindo(true);
+    setErro('');
+    try {
+      await api.delete(`/treinamentos/${treinamentoId}`);
+      aoAtualizar?.();
+      aoFechar();
+    } catch (err) {
+      setErro(err.response?.data?.erro || 'Não foi possível excluir o treinamento.');
+      setExcluindo(false);
+    }
+  }
+
   const podeGerenciar = usuario.perfil === 'ADMIN' || (usuario.perfil === 'SUPERVISOR' && dados?.supervisor?.id === usuario.id);
+
+  if (editando && dados) {
+    return (
+      <FormularioTreinamento
+        produtos={produtos}
+        treinamentoExistente={dados}
+        aoFechar={() => setEditando(false)}
+        aoSalvar={() => {
+          setEditando(false);
+          carregar();
+          aoAtualizar?.();
+        }}
+      />
+    );
+  }
 
   return (
     <div className="modal-fundo" onClick={aoFechar}>
@@ -100,6 +141,15 @@ export default function TreinamentoModal({ treinamentoId, aoFechar, aoAtualizar 
               <button className={`btn ${dados.meuInteresse ? 'btn-secundario' : ''}`} onClick={toggleInteresse}>
                 {dados.meuInteresse ? 'Cancelar interesse' : 'Tenho Interesse'}
               </button>
+            )}
+
+            {podeGerenciar && (
+              <div style={{ display: 'flex', gap: 8, marginBottom: 4 }}>
+                <button className="btn btn-secundario" onClick={abrirEdicao}>Editar</button>
+                <button className="btn btn-perigo" onClick={excluirTreinamento} disabled={excluindo}>
+                  {excluindo ? 'Excluindo...' : 'Excluir'}
+                </button>
+              </div>
             )}
 
             <div style={{ marginTop: 16 }}>

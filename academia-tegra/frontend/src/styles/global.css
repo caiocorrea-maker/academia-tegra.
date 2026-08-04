@@ -157,3 +157,52 @@ th { font-size: 12px; text-transform: uppercase; color: #888; }
 .filtros select, .filtros input { padding: 8px 10px; border-radius: 8px; border: 1px solid var(--cor-borda); }
 
 .grade-cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 14px; }
+
+/* ==================== Responsividade (celular e tablets) ==================== */
+@media (max-width: 900px) {
+  .layout { flex-direction: column; }
+
+  .sidebar {
+    width: 100%;
+    padding: 10px 0;
+    position: sticky;
+    top: 0;
+    z-index: 40;
+  }
+  .sidebar h1 { padding: 0 16px 10px; font-size: 16px; }
+  .sidebar nav { display: flex; overflow-x: auto; gap: 2px; padding: 0 8px; }
+  .sidebar nav a, .sidebar nav button {
+    white-space: nowrap;
+    width: auto;
+    padding: 8px 12px;
+    border-radius: 8px;
+    font-size: 13px;
+  }
+
+  .conteudo { padding: 14px; max-width: 100%; }
+
+  .topo-pagina { flex-direction: column; align-items: stretch; gap: 10px; }
+  .topo-pagina > div { display: flex; flex-wrap: wrap; gap: 8px; }
+
+  .filtros { flex-direction: column; }
+  .filtros select, .filtros input { width: 100%; }
+
+  .calendario { grid-template-columns: repeat(7, minmax(38px, 1fr)); gap: 3px; font-size: 11px; }
+  .dia-celula { min-height: 64px; padding: 3px; }
+  .dia-celula .num-dia { font-size: 11px; }
+  .evento-chip { font-size: 9px; padding: 1px 3px; }
+
+  .modal-caixa { padding: 16px; max-width: 100%; width: 100%; margin: 0 6px; }
+
+  table { display: block; overflow-x: auto; white-space: nowrap; }
+
+  .grade-cards { grid-template-columns: 1fr; }
+
+  .tela-auth .card { width: 92vw; max-width: 380px; }
+}
+
+@media (max-width: 480px) {
+  .calendario { grid-template-columns: repeat(7, minmax(30px, 1fr)); }
+  .evento-chip { overflow: hidden; text-overflow: clip; }
+  .dia-celula .num-dia { margin-bottom: 2px; }
+}
