@@ -34,6 +34,18 @@ export default function FormularioTreinamento({ produtos, treinamentoExistente, 
     api.get('/provas/modelos', { params: { produtoId } }).then((res) => setProvasDisponiveis(res.data));
   }, [produtoId]);
 
+  // Quando o admin escolhe um supervisor, só mostramos os produtos vinculados a ele —
+  // isso evita que um treinamento seja criado para um supervisor com um produto que ele
+  // não gerencia (a mesma regra que já vale quando o próprio supervisor cria).
+  const produtosFiltrados = (() => {
+    if (usuario.perfil !== 'ADMIN') return produtos;
+    if (!supervisorId) return [];
+    const supervisorSelecionado = supervisores.find((s) => s.id === supervisorId);
+    if (!supervisorSelecionado) return [];
+    const idsVinculados = supervisorSelecionado.produtos.map((p) => p.id);
+    return produtos.filter((p) => idsVinculados.includes(p.id));
+  })();
+
   async function salvar(e) {
     e.preventDefault();
     setErro('');
@@ -71,16 +83,19 @@ export default function FormularioTreinamento({ produtos, treinamentoExistente, 
         <form onSubmit={salvar}>
           <div className="campo">
             <label>Produto</label>
-            <select value={produtoId} onChange={(e) => { setProdutoId(e.target.value); setProvaId(''); }} required>
+            <select value={produtoId} onChange={(e) => { setProdutoId(e.target.value); setProvaId(''); }} required disabled={usuario.perfil === 'ADMIN' && !supervisorId}>
               <option value="">Selecione...</option>
-              {produtos.map((p) => <option key={p.id} value={p.id}>{p.nome}</option>)}
+              {produtosFiltrados.map((p) => <option key={p.id} value={p.id}>{p.nome}</option>)}
             </select>
+            {usuario.perfil === 'ADMIN' && !supervisorId && (
+              <span style={{ fontSize: 12, color: '#888' }}>Escolha um supervisor primeiro — os produtos mostrados serão apenas os vinculados a ele.</span>
+            )}
           </div>
 
           {usuario.perfil === 'ADMIN' && (
             <div className="campo">
               <label>Supervisor responsável</label>
-              <select value={supervisorId} onChange={(e) => setSupervisorId(e.target.value)} required>
+              <select value={supervisorId} onChange={(e) => { setSupervisorId(e.target.value); setProdutoId(''); setProvaId(''); }} required>
                 <option value="">Selecione...</option>
                 {supervisores.map((s) => <option key={s.id} value={s.id}>{s.nome}</option>)}
               </select>
