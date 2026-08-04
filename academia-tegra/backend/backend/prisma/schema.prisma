@@ -30,6 +30,8 @@ model Usuario {
   cpf           String?  @unique
   empresaId     String?
   empresa       EmpresaVenda? @relation(fields: [empresaId], references: [id])
+  gerente       String?
+  diretor       String?
 
   // Relações
   produtosVinculados   ProdutoSupervisor[]      // Somente SUPERVISOR

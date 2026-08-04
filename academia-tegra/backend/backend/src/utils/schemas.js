@@ -26,6 +26,8 @@ const cadastroCorretorSchema = z.object({
   cpf: z.string().min(11),
   email: z.string().email(),
   senha: z.string().min(6),
+  gerente: z.string().optional(),
+  diretor: z.string().optional(),
 });
 
 const editarCorretorSchema = z.object({
@@ -33,6 +35,8 @@ const editarCorretorSchema = z.object({
   empresaId: z.string().uuid().optional(),
   email: z.string().email().optional(),
   senha: z.string().min(6).optional(),
+  gerente: z.string().optional(),
+  diretor: z.string().optional(),
 });
 
 const empresaSchema = z.object({
@@ -64,6 +68,7 @@ const provaModeloSchema = z.object({
 
 const treinamentoSchema = z.object({
   produtoId: z.string().uuid(),
+  supervisorId: z.string().uuid().optional(),
   data: z.string(), // ISO date
   horario: z.string().regex(/^([01]\d|2[0-3]):([0-5]\d)$/, 'Horário no formato HH:MM'),
   tema: z.string().min(3),

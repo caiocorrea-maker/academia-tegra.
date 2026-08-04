@@ -11,5 +11,7 @@ router.use(autenticar);
 router.get('/', permitir('ADMIN', 'SUPERVISOR'), corretorController.listar);
 router.get('/:id', corretorController.detalhar); // controller valida se é o próprio perfil
 router.put('/perfil/me', permitir('CORRETOR'), corretorController.editarProprio);
+router.put('/:id/ativo', permitir('ADMIN'), corretorController.alternarAtivo);
+router.delete('/:id', permitir('ADMIN'), corretorController.excluir);
 
 module.exports = router;

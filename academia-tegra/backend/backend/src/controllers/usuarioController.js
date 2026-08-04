@@ -3,12 +3,14 @@ const prisma = require('../config/prisma');
 const { criarUsuarioInternoSchema, editarUsuarioInternoSchema } = require('../utils/schemas');
 const { HttpError } = require('../middleware/errorHandler');
 
-// Lista administradores e supervisores (painel do admin)
+// Lista administradores e supervisores (painel do admin) — com busca por nome e filtro por perfil/produto
 async function listarInternos(req, res) {
-  const { perfil } = req.query; // filtro opcional: ADMIN | SUPERVISOR
+  const { perfil, busca, produtoId } = req.query;
   const usuarios = await prisma.usuario.findMany({
     where: {
       perfil: perfil ? perfil : { in: ['ADMIN', 'SUPERVISOR'] },
+      ...(busca && { nome: { contains: busca, mode: 'insensitive' } }),
+      ...(produtoId && { produtosVinculados: { some: { produtoId } } }),
     },
     select: {
       id: true, nome: true, email: true, perfil: true, ativo: true, criadoEm: true,
@@ -135,10 +137,38 @@ async function editarInterno(req, res) {
   res.json(usuario);
 }
 
+// Exclui administrador ou supervisor (somente ADMIN). Se houver treinamentos/histórico
+// vinculado, o banco impede a exclusão para preservar o histórico — nesse caso, orientamos
+// a inativar em vez de excluir.
+async function excluirInterno(req, res) {
+  const { id } = req.params;
+
+  const usuarioExistente = await prisma.usuario.findUnique({ where: { id } });
+  if (!usuarioExistente || !['ADMIN', 'SUPERVISOR'].includes(usuarioExistente.perfil)) {
+    throw new HttpError(404, 'Usuário não encontrado.');
+  }
+
+  if (usuarioExistente.id === req.usuario.id) {
+    throw new HttpError(400, 'Você não pode excluir seu próprio usuário.');
+  }
+
+  try {
+    await prisma.produtoSupervisor.deleteMany({ where: { supervisorId: id } });
+    await prisma.usuario.delete({ where: { id } });
+    res.json({ mensagem: 'Usuário excluído com sucesso.' });
+  } catch (err) {
+    if (err.code === 'P2003' || err.code === 'P2014') {
+      throw new HttpError(409, 'Este usuário possui treinamentos ou histórico vinculado e não pode ser excluído. Você pode inativá-lo em vez disso.');
+    }
+    throw err;
+  }
+}
+
 module.exports = {
   listarInternos,
   listarSupervisoresComEstatisticas,
   detalharSupervisor,
   criarInterno,
   editarInterno,
+  excluirInterno,
 };

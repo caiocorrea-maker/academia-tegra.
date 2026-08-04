@@ -29,6 +29,8 @@ async function cadastrar(req, res) {
       empresaId: dados.empresaId,
       perfil: 'CORRETOR',
       senhaHash,
+      gerente: dados.gerente || null,
+      diretor: dados.diretor || null,
     },
     select: { id: true, nome: true, email: true, empresa: { select: { nome: true } } },
   });
@@ -69,7 +71,7 @@ async function detalhar(req, res) {
   const corretor = await prisma.usuario.findUnique({
     where: { id, perfil: 'CORRETOR' },
     select: {
-      id: true, nome: true, cpf: true, email: true,
+      id: true, nome: true, cpf: true, email: true, gerente: true, diretor: true,
       empresa: { select: { id: true, nome: true } },
       certificados: {
         orderBy: { emitidoEm: 'desc' },
@@ -97,6 +99,8 @@ async function editarProprio(req, res) {
 
   if (dados.nome) data.nome = dados.nome;
   if (dados.email) data.email = dados.email;
+  if (dados.gerente !== undefined) data.gerente = dados.gerente || null;
+  if (dados.diretor !== undefined) data.diretor = dados.diretor || null;
   if (dados.empresaId) {
     const empresa = await prisma.empresaVenda.findUnique({ where: { id: dados.empresaId } });
     if (!empresa || !empresa.ativo) throw new HttpError(400, 'Empresa de vendas inválida.');
@@ -113,4 +117,40 @@ async function editarProprio(req, res) {
   res.json(corretor);
 }
 
-module.exports = { cadastrar, listar, detalhar, editarProprio };
+// Exclusão de corretor (somente Admin). Se houver histórico vinculado (certificados,
+// interesses, presenças, tentativas de prova), o banco impede a exclusão para preservar
+// o histórico — nesse caso orientamos a inativar via edição (ativo=false) em vez de excluir.
+async function excluir(req, res) {
+  const { id } = req.params;
+
+  const corretor = await prisma.usuario.findUnique({ where: { id, perfil: 'CORRETOR' } });
+  if (!corretor) throw new HttpError(404, 'Corretor não encontrado.');
+
+  try {
+    await prisma.usuario.delete({ where: { id } });
+    res.json({ mensagem: 'Corretor excluído com sucesso.' });
+  } catch (err) {
+    if (err.code === 'P2003' || err.code === 'P2014') {
+      throw new HttpError(409, 'Este corretor possui histórico vinculado (certificados, presenças ou provas) e não pode ser excluído. Você pode inativá-lo em vez disso.');
+    }
+    throw err;
+  }
+}
+
+// Inativa/reativa corretor (somente Admin) — alternativa à exclusão quando há histórico vinculado
+async function alternarAtivo(req, res) {
+  const { id } = req.params;
+  const { ativo } = req.body;
+
+  const corretor = await prisma.usuario.findUnique({ where: { id, perfil: 'CORRETOR' } });
+  if (!corretor) throw new HttpError(404, 'Corretor não encontrado.');
+
+  const atualizado = await prisma.usuario.update({
+    where: { id },
+    data: { ativo: Boolean(ativo) },
+    select: { id: true, nome: true, ativo: true },
+  });
+  res.json(atualizado);
+}
+
+module.exports = { cadastrar, listar, detalhar, editarProprio, excluir, alternarAtivo };
