@@ -14,6 +14,7 @@ router.get('/:id', treinamentoController.detalhar);
 // Cadastro/edição — Admin e Supervisor
 router.post('/', permitir('ADMIN', 'SUPERVISOR'), treinamentoController.criar);
 router.put('/:id', permitir('ADMIN', 'SUPERVISOR'), treinamentoController.editar);
+router.delete('/:id', permitir('ADMIN', 'SUPERVISOR'), treinamentoController.excluir);
 
 // Evidências (anexadas depois, como edição)
 router.post('/:id/evidencias', permitir('ADMIN', 'SUPERVISOR'), upload.array('arquivos'), treinamentoController.adicionarEvidencias);

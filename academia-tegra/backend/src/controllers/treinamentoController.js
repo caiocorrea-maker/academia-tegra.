@@ -1,5 +1,6 @@
 const crypto = require('crypto');
 const QRCode = require('qrcode');
+const sharp = require('sharp');
 const prisma = require('../config/prisma');
 const { treinamentoSchema } = require('../utils/schemas');
 const { HttpError } = require('../middleware/errorHandler');
@@ -7,11 +8,23 @@ const { uploadBuffer, getFileUrl } = require('../config/s3');
 
 // ---- Helpers ----
 
-function montarDataHora(dataISO, horario) {
-  const [h, m] = horario.split(':').map(Number);
-  const data = new Date(dataISO);
-  data.setHours(h, m, 0, 0);
-  return data;
+// Converte uma data "YYYY-MM-DD" vinda do formulário em um Date "ancorado" ao meio-dia
+// UTC. Isso evita o bug clássico de fuso horário em que salvar a data pura à meia-noite
+// UTC e depois exibi-la em horário de Brasília (UTC-3) faz o dia "voltar" um dia.
+function ancorarData(dataString) {
+  return new Date(`${dataString}T12:00:00Z`);
+}
+
+// Reconstrói o momento exato (data + horário) de um treinamento, assumindo o horário
+// informado como horário de Brasília (UTC-3), para comparações de prazo (ex: início do
+// treinamento, liberação de prova). Extrai a data via getters UTC porque o valor já está
+// ancorado ao meio-dia UTC (ancorarData), então isso é seguro em qualquer fuso do servidor.
+function montarDataHora(dataArmazenada, horario) {
+  const data = new Date(dataArmazenada);
+  const ano = data.getUTCFullYear();
+  const mes = String(data.getUTCMonth() + 1).padStart(2, '0');
+  const dia = String(data.getUTCDate()).padStart(2, '0');
+  return new Date(`${ano}-${mes}-${dia}T${horario}:00-03:00`);
 }
 
 async function contarMetricas(treinamentoId) {
@@ -156,12 +169,20 @@ async function detalhar(req, res) {
 async function criar(req, res) {
   const dados = treinamentoSchema.parse(req.body);
 
-  // Supervisor só pode criar treinamento de produto vinculado a ele
+  let supervisorId = req.usuario.id;
+
   if (req.usuario.perfil === 'SUPERVISOR') {
+    // Supervisor só pode criar treinamento de produto vinculado a ele
     const vinculado = await prisma.produtoSupervisor.findUnique({
       where: { produtoId_supervisorId: { produtoId: dados.produtoId, supervisorId: req.usuario.id } },
     });
     if (!vinculado) throw new HttpError(403, 'Você não está vinculado a este produto.');
+  } else if (req.usuario.perfil === 'ADMIN' && dados.supervisorId) {
+    const supervisor = await prisma.usuario.findUnique({ where: { id: dados.supervisorId } });
+    if (!supervisor || supervisor.perfil !== 'SUPERVISOR' || !supervisor.ativo) {
+      throw new HttpError(400, 'Supervisor indicado é inválido.');
+    }
+    supervisorId = dados.supervisorId;
   }
 
   if (dados.temProva && !dados.provaId) {
@@ -171,8 +192,8 @@ async function criar(req, res) {
   const treinamento = await prisma.treinamento.create({
     data: {
       produtoId: dados.produtoId,
-      supervisorId: req.usuario.perfil === 'SUPERVISOR' ? req.usuario.id : req.body.supervisorId || req.usuario.id,
-      data: new Date(dados.data),
+      supervisorId,
+      data: ancorarData(dados.data),
       horario: dados.horario,
       tema: dados.tema,
       planoTreinamento: dados.planoTreinamento,
@@ -195,11 +216,21 @@ async function editar(req, res) {
     throw new HttpError(403, 'Você só pode editar treinamentos criados por você.');
   }
 
+  let novoSupervisorId;
+  if (req.usuario.perfil === 'ADMIN' && dados.supervisorId) {
+    const supervisor = await prisma.usuario.findUnique({ where: { id: dados.supervisorId } });
+    if (!supervisor || supervisor.perfil !== 'SUPERVISOR' || !supervisor.ativo) {
+      throw new HttpError(400, 'Supervisor indicado é inválido.');
+    }
+    novoSupervisorId = dados.supervisorId;
+  }
+
   const atualizado = await prisma.treinamento.update({
     where: { id },
     data: {
       ...(dados.produtoId && { produtoId: dados.produtoId }),
-      ...(dados.data && { data: new Date(dados.data) }),
+      ...(novoSupervisorId && { supervisorId: novoSupervisorId }),
+      ...(dados.data && { data: ancorarData(dados.data) }),
       ...(dados.horario && { horario: dados.horario }),
       ...(dados.tema && { tema: dados.tema }),
       ...(dados.planoTreinamento && { planoTreinamento: dados.planoTreinamento }),
@@ -208,6 +239,21 @@ async function editar(req, res) {
   });
 
   res.json(atualizado);
+}
+
+// Exclui um treinamento (Admin: qualquer um; Supervisor: apenas os que criou).
+async function excluir(req, res) {
+  const { id } = req.params;
+
+  const treinamento = await prisma.treinamento.findUnique({ where: { id } });
+  if (!treinamento) throw new HttpError(404, 'Treinamento não encontrado.');
+
+  if (req.usuario.perfil === 'SUPERVISOR' && treinamento.supervisorId !== req.usuario.id) {
+    throw new HttpError(403, 'Você só pode excluir treinamentos criados por você.');
+  }
+
+  await prisma.treinamento.delete({ where: { id } });
+  res.json({ mensagem: 'Treinamento excluído com sucesso.' });
 }
 
 // ---- Evidências (anexadas depois, como edição) ----
@@ -222,13 +268,22 @@ async function adicionarEvidencias(req, res) {
 
   const evidenciasCriadas = [];
   for (const arquivo of arquivos) {
-    const key = await uploadBuffer(arquivo.buffer, arquivo.originalname, arquivo.mimetype, 'evidencias');
+    // Compacta a imagem (redimensiona para no máximo 1600px de largura e reduz a
+    // qualidade JPEG) para minimizar o espaço ocupado no bucket, sem perda visível.
+    const bufferComprimido = await sharp(arquivo.buffer)
+      .rotate() // corrige orientação com base no EXIF antes de remover os metadados
+      .resize({ width: 1600, withoutEnlargement: true })
+      .jpeg({ quality: 75, mozjpeg: true })
+      .toBuffer();
+
+    const nomeComprimido = arquivo.originalname.replace(/\.[^.]+$/, '') + '.jpg';
+    const key = await uploadBuffer(bufferComprimido, nomeComprimido, 'image/jpeg', 'evidencias');
     const evidencia = await prisma.evidencia.create({
       data: {
         treinamentoId: id,
         urlArquivo: key,
-        nomeArquivo: arquivo.originalname,
-        tipo: arquivo.mimetype,
+        nomeArquivo: nomeComprimido,
+        tipo: 'image/jpeg',
       },
     });
     evidenciasCriadas.push(evidencia);
@@ -351,6 +406,7 @@ module.exports = {
   detalhar,
   criar,
   editar,
+  excluir,
   adicionarEvidencias,
   removerEvidencia,
   demonstrarInteresse,

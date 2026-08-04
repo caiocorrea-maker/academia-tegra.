@@ -2,10 +2,11 @@ const { S3Client, PutObjectCommand, GetObjectCommand, DeleteObjectCommand } = re
 const { getSignedUrl } = require('@aws-sdk/s3-request-presigner');
 const { v4: uuidv4 } = require('uuid');
 
-// Cliente compatível com Cloudflare R2, AWS S3, Backblaze B2, etc.
+// Cliente compatível com Cloudflare R2, Backblaze B2, AWS S3, etc.
 const s3 = new S3Client({
   region: process.env.S3_REGION || 'auto',
   endpoint: process.env.S3_ENDPOINT,
+  forcePathStyle: true, // necessário para compatibilidade ampla (ex: Backblaze B2)
   credentials: {
     accessKeyId: process.env.S3_ACCESS_KEY_ID,
     secretAccessKey: process.env.S3_SECRET_ACCESS_KEY,

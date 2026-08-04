@@ -13,5 +13,6 @@ router.get('/supervisores/:id', permitir('ADMIN', 'SUPERVISOR'), usuarioControll
 router.get('/internos', permitir('ADMIN'), usuarioController.listarInternos);
 router.post('/internos', permitir('ADMIN'), usuarioController.criarInterno);
 router.put('/internos/:id', permitir('ADMIN'), usuarioController.editarInterno);
+router.delete('/internos/:id', permitir('ADMIN'), usuarioController.excluirInterno);
 
 module.exports = router;
