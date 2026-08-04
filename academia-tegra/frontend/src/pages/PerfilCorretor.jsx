@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { useParams } from 'react-router-dom';
+import { useParams, useNavigate } from 'react-router-dom';
 import Layout from '../components/Layout';
 import { useAuth } from '../context/AuthContext';
 import { formatarCPF } from '../utils/formatadores';
@@ -8,11 +8,13 @@ import api from '../services/api';
 export default function PerfilCorretor() {
   const { id } = useParams();
   const { usuario } = useAuth();
+  const navigate = useNavigate();
   const [dados, setDados] = useState(null);
   const [editando, setEditando] = useState(false);
   const [form, setForm] = useState({ nome: '', email: '', senha: '', gerente: '', diretor: '' });
   const [mensagem, setMensagem] = useState('');
   const [erro, setErro] = useState('');
+  const [excluindo, setExcluindo] = useState(false);
 
   const ehProprioPerfil = usuario.perfil === 'CORRETOR' && usuario.id === id;
 
@@ -41,6 +43,18 @@ export default function PerfilCorretor() {
 
   if (!dados) return <Layout><p>Carregando...</p></Layout>;
 
+  async function excluir() {
+    if (!confirm(`Tem certeza que deseja excluir o corretor "${dados.nome}"? Essa ação não pode ser desfeita.`)) return;
+    setExcluindo(true);
+    try {
+      await api.delete(`/corretores/${id}`);
+      navigate('/corretores');
+    } catch (err) {
+      alert(err.response?.data?.erro || 'Não foi possível excluir este corretor.');
+      setExcluindo(false);
+    }
+  }
+
   return (
     <Layout>
       <h2>Perfil do Corretor</h2>
@@ -55,6 +69,11 @@ export default function PerfilCorretor() {
             <p><strong>Gerente:</strong> {dados.gerente || '-'}</p>
             <p><strong>Diretor:</strong> {dados.diretor || '-'}</p>
             {ehProprioPerfil && <button className="btn btn-secundario" onClick={() => setEditando(true)}>Editar meus dados</button>}
+            {usuario.perfil === 'ADMIN' && (
+              <button className="btn btn-perigo" onClick={excluir} disabled={excluindo} style={{ marginLeft: 8 }}>
+                {excluindo ? 'Excluindo...' : 'Excluir corretor'}
+              </button>
+            )}
           </>
         ) : (
           <form onSubmit={salvar}>
