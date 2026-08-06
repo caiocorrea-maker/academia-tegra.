@@ -9,6 +9,8 @@ router.use(autenticar);
 router.get('/modelos', permitir('ADMIN', 'SUPERVISOR'), provaController.listarModelos);
 router.get('/modelos/:id', permitir('ADMIN', 'SUPERVISOR'), provaController.detalharModelo);
 router.post('/modelos', permitir('ADMIN', 'SUPERVISOR'), provaController.criarModelo);
+router.put('/modelos/:id', permitir('ADMIN', 'SUPERVISOR'), provaController.editarModelo);
+router.delete('/modelos/:id', permitir('ADMIN', 'SUPERVISOR'), provaController.excluirModelo);
 
 // Realização da prova pelo corretor
 router.get('/treinamento/:treinamentoId/iniciar', permitir('CORRETOR'), provaController.iniciar);

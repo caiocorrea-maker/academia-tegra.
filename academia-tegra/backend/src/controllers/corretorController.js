@@ -31,6 +31,7 @@ async function cadastrar(req, res) {
       senhaHash,
       gerente: dados.gerente || null,
       diretor: dados.diretor || null,
+      creci: dados.creci || null,
     },
     select: { id: true, nome: true, email: true, empresa: { select: { nome: true } } },
   });
@@ -59,11 +60,22 @@ async function listar(req, res) {
   res.json(corretores);
 }
 
-// Perfil completo de um corretor, com certificados (mais recente primeiro)
+// Certificados são válidos por 6 meses a partir da emissão.
+const MESES_VALIDADE_CERTIFICADO = 6;
+
+function calcularValidoAte(emitidoEm) {
+  const validoAte = new Date(emitidoEm);
+  validoAte.setMonth(validoAte.getMonth() + MESES_VALIDADE_CERTIFICADO);
+  return validoAte;
+}
+
+// Perfil completo de um corretor: certificados agrupados por produto (do mais antigo para
+// o mais novo dentro de cada produto), cada um com sua validade de 6 meses calculada, e um
+// indicador de aptidão por produto (verde/vermelho) com base no mínimo de certificados
+// válidos configurado em cada produto (Produto.certificadosNecessarios).
 async function detalhar(req, res) {
   const { id } = req.params;
 
-  // Corretor só pode ver o próprio perfil; Admin/Supervisor podem ver qualquer um
   if (req.usuario.perfil === 'CORRETOR' && req.usuario.id !== id) {
     throw new HttpError(403, 'Você só pode visualizar o próprio perfil.');
   }
@@ -71,13 +83,12 @@ async function detalhar(req, res) {
   const corretor = await prisma.usuario.findUnique({
     where: { id, perfil: 'CORRETOR' },
     select: {
-      id: true, nome: true, cpf: true, email: true, gerente: true, diretor: true,
+      id: true, nome: true, cpf: true, email: true, gerente: true, diretor: true, creci: true,
       empresa: { select: { id: true, nome: true } },
       certificados: {
-        orderBy: { emitidoEm: 'desc' },
         select: {
           id: true, percentual: true, emitidoEm: true, urlArquivo: true,
-          treinamento: { select: { tema: true, produto: { select: { nome: true } } } },
+          treinamento: { select: { tema: true, produto: { select: { id: true, nome: true, corCalendario: true, certificadosNecessarios: true } } } },
         },
       },
     },
@@ -85,11 +96,58 @@ async function detalhar(req, res) {
 
   if (!corretor) throw new HttpError(404, 'Corretor não encontrado.');
 
-  const certificadosComUrl = await Promise.all(
-    corretor.certificados.map(async (c) => ({ ...c, urlArquivo: await getFileUrl(c.urlArquivo) }))
+  const agora = new Date();
+
+  const certificadosProcessados = await Promise.all(
+    corretor.certificados.map(async (c) => ({
+      id: c.id,
+      percentual: c.percentual,
+      emitidoEm: c.emitidoEm,
+      validoAte: calcularValidoAte(c.emitidoEm),
+      valido: agora < calcularValidoAte(c.emitidoEm),
+      tema: c.treinamento.tema,
+      produto: c.treinamento.produto,
+      url: await getFileUrl(c.urlArquivo),
+    }))
   );
 
-  res.json({ ...corretor, certificados: certificadosComUrl });
+  // Agrupa por produto, ordenando os certificados do mais antigo para o mais novo dentro do grupo.
+  const grupos = {};
+  for (const cert of certificadosProcessados) {
+    const chave = cert.produto.id;
+    if (!grupos[chave]) {
+      grupos[chave] = {
+        produto: { id: cert.produto.id, nome: cert.produto.nome, corCalendario: cert.produto.corCalendario },
+        certificadosNecessarios: cert.produto.certificadosNecessarios,
+        certificados: [],
+      };
+    }
+    grupos[chave].certificados.push(cert);
+  }
+
+  const certificadosPorProduto = Object.values(grupos)
+    .map((grupo) => {
+      grupo.certificados.sort((a, b) => new Date(a.emitidoEm) - new Date(b.emitidoEm));
+      const validosCount = grupo.certificados.filter((c) => c.valido).length;
+      return {
+        ...grupo,
+        qtdCertificadosValidos: validosCount,
+        apto: validosCount >= grupo.certificadosNecessarios,
+      };
+    })
+    .sort((a, b) => a.produto.nome.localeCompare(b.produto.nome));
+
+  res.json({
+    id: corretor.id,
+    nome: corretor.nome,
+    cpf: corretor.cpf,
+    email: corretor.email,
+    gerente: corretor.gerente,
+    diretor: corretor.diretor,
+    creci: corretor.creci,
+    empresa: corretor.empresa,
+    certificadosPorProduto,
+  });
 }
 
 // Corretor edita os próprios dados
@@ -101,6 +159,7 @@ async function editarProprio(req, res) {
   if (dados.email) data.email = dados.email;
   if (dados.gerente !== undefined) data.gerente = dados.gerente || null;
   if (dados.diretor !== undefined) data.diretor = dados.diretor || null;
+  if (dados.creci !== undefined) data.creci = dados.creci || null;
   if (dados.empresaId) {
     const empresa = await prisma.empresaVenda.findUnique({ where: { id: dados.empresaId } });
     if (!empresa || !empresa.ativo) throw new HttpError(400, 'Empresa de vendas inválida.');

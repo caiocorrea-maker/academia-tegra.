@@ -1,7 +1,18 @@
 const prisma = require('../config/prisma');
-const { provaModeloSchema, responderProvaSchema } = require('../utils/schemas');
+const { provaModeloSchema, editarProvaModeloSchema, responderProvaSchema } = require('../utils/schemas');
 const { HttpError } = require('../middleware/errorHandler');
 const { gerarCertificadoParaTentativa } = require('../services/certificadoService');
+
+// Verifica se o usuário (admin ou supervisor) pode gerenciar (editar/excluir) uma prova:
+// admin pode qualquer uma; supervisor só as dos produtos vinculados a ele.
+async function podeGerenciarProva(usuario, prova) {
+  if (usuario.perfil === 'ADMIN') return true;
+  if (usuario.perfil !== 'SUPERVISOR') return false;
+  const vinculado = await prisma.produtoSupervisor.findUnique({
+    where: { produtoId_supervisorId: { produtoId: prova.produtoId, supervisorId: usuario.id } },
+  });
+  return Boolean(vinculado);
+}
 
 // ---- Banco de provas reutilizáveis ----
 // Disponível para reuso em qualquer treinamento do MESMO produto, independente de quem criou.
@@ -55,6 +66,72 @@ async function criarModelo(req, res) {
   });
 
   res.status(201).json(prova);
+}
+
+// Edita uma prova salva. Se ela já foi usada em algum treinamento, só permite trocar o
+// título (as questões ficam travadas, para não corromper o histórico de correção de quem
+// já respondeu). Se nunca foi usada, permite substituir as questões também.
+async function editarModelo(req, res) {
+  const { id } = req.params;
+
+  const prova = await prisma.provaModelo.findUnique({ where: { id } });
+  if (!prova) throw new HttpError(404, 'Prova não encontrada.');
+
+  if (!(await podeGerenciarProva(req.usuario, prova))) {
+    throw new HttpError(403, 'Você não tem permissão para editar esta prova.');
+  }
+
+  const jaUsada = (await prisma.treinamento.count({ where: { provaId: id } })) > 0;
+  const dados = editarProvaModeloSchema.parse(req.body);
+
+  if (dados.questoes && jaUsada) {
+    throw new HttpError(400, 'Esta prova já foi usada em algum treinamento, então as questões não podem mais ser alteradas — apenas o título. Se precisar mudar as perguntas, cadastre uma nova prova.');
+  }
+
+  if (dados.questoes) {
+    // Nunca usada: pode substituir título e questões por completo.
+    await prisma.questao.deleteMany({ where: { provaModeloId: id } });
+    const atualizada = await prisma.provaModelo.update({
+      where: { id },
+      data: {
+        titulo: dados.titulo,
+        questoes: {
+          create: dados.questoes.map((q, i) => ({
+            enunciado: q.enunciado,
+            ordem: i + 1,
+            alternativas: {
+              create: q.alternativas.map((a, j) => ({ texto: a.texto, correta: a.correta, ordem: j + 1 })),
+            },
+          })),
+        },
+      },
+      include: { questoes: { include: { alternativas: true } } },
+    });
+    return res.json(atualizada);
+  }
+
+  const atualizada = await prisma.provaModelo.update({ where: { id }, data: { titulo: dados.titulo } });
+  res.json(atualizada);
+}
+
+// Exclui uma prova salva — só é permitido se ela nunca foi usada em nenhum treinamento.
+async function excluirModelo(req, res) {
+  const { id } = req.params;
+
+  const prova = await prisma.provaModelo.findUnique({ where: { id } });
+  if (!prova) throw new HttpError(404, 'Prova não encontrada.');
+
+  if (!(await podeGerenciarProva(req.usuario, prova))) {
+    throw new HttpError(403, 'Você não tem permissão para excluir esta prova.');
+  }
+
+  const jaUsada = (await prisma.treinamento.count({ where: { provaId: id } })) > 0;
+  if (jaUsada) {
+    throw new HttpError(409, 'Esta prova já foi usada em algum treinamento e não pode ser excluída, para preservar o histórico.');
+  }
+
+  await prisma.provaModelo.delete({ where: { id } });
+  res.json({ mensagem: 'Prova excluída com sucesso.' });
 }
 
 // ---- Realização da prova pelo corretor ----
@@ -158,4 +235,4 @@ async function responder(req, res) {
   res.json({ acertos, totalQuestoes, percentual, aprovado, certificadoGerado: Boolean(certificado) });
 }
 
-module.exports = { listarModelos, detalharModelo, criarModelo, iniciar, responder };
+module.exports = { listarModelos, detalharModelo, criarModelo, editarModelo, excluirModelo, iniciar, responder };

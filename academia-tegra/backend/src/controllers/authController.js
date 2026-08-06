@@ -70,7 +70,15 @@ async function esqueciSenha(req, res) {
   });
 
   const link = `${process.env.FRONTEND_URL}/redefinir-senha?token=${token}`;
-  await enviarEmailRecuperacaoSenha(usuario.email, usuario.nome, link);
+
+  try {
+    await enviarEmailRecuperacaoSenha(usuario.email, usuario.nome, link);
+  } catch (err) {
+    // Não deixamos a falha de envio derrubar a resposta com um erro 500 (o que revelaria
+    // ao atacante que o e-mail existe). Registramos o erro real nos logs do servidor para
+    // que o time técnico consiga diagnosticar (ex: restrição de domínio no Resend).
+    console.error(`[esqueciSenha] Falha ao enviar e-mail para ${usuario.email}:`, err.message);
+  }
 
   res.json(respostaGenerica);
 }

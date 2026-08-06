@@ -32,6 +32,7 @@ model Usuario {
   empresa       EmpresaVenda? @relation(fields: [empresaId], references: [id])
   gerente       String?
   diretor       String?
+  creci         String?
 
   // Relações
   produtosVinculados   ProdutoSupervisor[]      // Somente SUPERVISOR
@@ -70,6 +71,7 @@ model Produto {
   corCalendario String   // hex color, ex: #FF5733
   ativo         Boolean  @default(true)
   criadoEm      DateTime @default(now())
+  certificadosNecessarios Int @default(3) // qtd. mínima de certificados válidos p/ corretor ser considerado apto
 
   supervisores   ProdutoSupervisor[]
   treinamentos   Treinamento[]
@@ -103,6 +105,7 @@ model Treinamento {
   data              DateTime  // data do treinamento
   horario           String    // ex: "14:30"
   tema              String
+  localTreinamento  String?
   planoTreinamento  String    @db.Text
   formato           String    @default("PRESENCIAL")
   status            StatusTreinamento @default(AGENDADO)
@@ -148,6 +151,7 @@ model InteresseTreinamento {
   corretor       Usuario     @relation(fields: [corretorId], references: [id], onDelete: Cascade)
   criadoEm       DateTime    @default(now())
   cancelado      Boolean     @default(false)
+  lembreteEnviado Boolean    @default(false)
 
   @@unique([treinamentoId, corretorId])
 }

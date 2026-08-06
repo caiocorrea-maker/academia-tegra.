@@ -28,6 +28,7 @@ const cadastroCorretorSchema = z.object({
   senha: z.string().min(6),
   gerente: z.string().optional(),
   diretor: z.string().optional(),
+  creci: z.string().optional(),
 });
 
 const editarCorretorSchema = z.object({
@@ -37,6 +38,7 @@ const editarCorretorSchema = z.object({
   senha: z.string().min(6).optional(),
   gerente: z.string().optional(),
   diretor: z.string().optional(),
+  creci: z.string().optional(),
 });
 
 const empresaSchema = z.object({
@@ -46,6 +48,7 @@ const empresaSchema = z.object({
 const produtoSchema = z.object({
   nome: z.string().min(2),
   corCalendario: z.string().regex(/^#[0-9A-Fa-f]{6}$/, 'Cor deve estar em formato hexadecimal, ex: #FF5733'),
+  certificadosNecessarios: z.number().int().min(1).optional(),
 });
 
 const alternativaSchema = z.object({
@@ -66,12 +69,18 @@ const provaModeloSchema = z.object({
   questoes: z.array(questaoSchema).length(10, 'A prova deve conter exatamente 10 questões.'),
 });
 
+const editarProvaModeloSchema = z.object({
+  titulo: z.string().min(3),
+  questoes: z.array(questaoSchema).length(10, 'A prova deve conter exatamente 10 questões.').optional(),
+});
+
 const treinamentoSchema = z.object({
   produtoId: z.string().uuid(),
   supervisorId: z.string().uuid().optional(),
   data: z.string(), // ISO date
   horario: z.string().regex(/^([01]\d|2[0-3]):([0-5]\d)$/, 'Horário no formato HH:MM'),
   tema: z.string().min(3),
+  localTreinamento: z.string().optional(),
   planoTreinamento: z.string().min(3),
   temProva: z.boolean(),
   provaId: z.string().uuid().nullable().optional(),
@@ -104,6 +113,7 @@ module.exports = {
   empresaSchema,
   produtoSchema,
   provaModeloSchema,
+  editarProvaModeloSchema,
   treinamentoSchema,
   responderProvaSchema,
   esqueciSenhaSchema,

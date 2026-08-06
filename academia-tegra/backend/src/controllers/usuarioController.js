@@ -51,6 +51,27 @@ async function listarSupervisoresComEstatisticas(req, res) {
 }
 
 // Detalhamento de um supervisor: treinamentos concluídos e futuros
+// Conta, para um produto, quantos corretores distintos têm ao menos o mínimo de
+// certificados válidos (não vencidos — validade de 6 meses) exigido para esse produto.
+async function contarCorretoresAptos(produtoId, certificadosNecessarios) {
+  const agora = new Date();
+  const certificados = await prisma.certificado.findMany({
+    where: { treinamento: { produtoId } },
+    select: { corretorId: true, emitidoEm: true },
+  });
+
+  const validosPorCorretor = {};
+  for (const c of certificados) {
+    const validoAte = new Date(c.emitidoEm);
+    validoAte.setMonth(validoAte.getMonth() + 6);
+    if (agora < validoAte) {
+      validosPorCorretor[c.corretorId] = (validosPorCorretor[c.corretorId] || 0) + 1;
+    }
+  }
+
+  return Object.values(validosPorCorretor).filter((qtd) => qtd >= certificadosNecessarios).length;
+}
+
 async function detalharSupervisor(req, res) {
   const { id } = req.params;
   const agora = new Date();
@@ -76,12 +97,22 @@ async function detalharSupervisor(req, res) {
     .sort((a, b) => new Date(a.data) - new Date(b.data))
     .map((t) => ({ id: t.id, data: t.data, produto: t.produto.nome, tema: t.tema }));
 
+  const produtosComAptos = await Promise.all(
+    supervisor.produtosVinculados.map(async (v) => ({
+      id: v.produto.id,
+      nome: v.produto.nome,
+      corCalendario: v.produto.corCalendario,
+      corretoresAptos: await contarCorretoresAptos(v.produto.id, v.produto.certificadosNecessarios),
+    }))
+  );
+
   res.json({
     id: supervisor.id,
     nome: supervisor.nome,
-    produtos: supervisor.produtosVinculados.map((v) => v.produto),
-    treinamentosConcluidos: concluidos,
-    treinamentosFuturos: futuros,
+    produtos: produtosComAptos,
+    totalTreinamentos: treinamentos.length,
+    treinamentosConcluidos: concluidos.slice(0, 3),
+    treinamentosFuturos: futuros.slice(0, 3),
   });
 }
 

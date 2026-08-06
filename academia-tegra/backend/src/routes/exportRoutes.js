@@ -5,5 +5,6 @@ const { autenticar, permitir } = require('../middleware/auth');
 
 router.use(autenticar);
 router.get('/treinamentos', permitir('ADMIN', 'SUPERVISOR'), exportController.exportarTreinamentos);
+router.get('/presencas', permitir('ADMIN', 'SUPERVISOR'), exportController.exportarPresencas);
 
 module.exports = router;

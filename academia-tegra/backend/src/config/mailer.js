@@ -31,4 +31,22 @@ async function enviarEmailRecuperacaoSenha(destinatario, nome, linkReset) {
   });
 }
 
-module.exports = { transporter, enviarEmailRecuperacaoSenha };
+async function enviarEmailLembreteTreinamento(destinatario, nome, treinamento) {
+  const dataFormatada = new Date(treinamento.data).toLocaleDateString('pt-BR');
+  await transporter.sendMail({
+    from: process.env.SMTP_FROM,
+    to: destinatario,
+    subject: 'Lembrete: seu treinamento é amanhã! 📚',
+    html: `
+      <div style="font-family: Arial, sans-serif; max-width: 480px; margin: 0 auto;">
+        <h2 style="color:#1a1a2e;">Academia Tegra</h2>
+        <p>Olá, ${nome}!</p>
+        <p>Passando para lembrar que amanhã, <strong>${dataFormatada}</strong>, às <strong>${treinamento.horario}</strong>, acontece o treinamento <strong>"${treinamento.tema}"</strong> sobre o produto <strong>${treinamento.produtoNome}</strong>${treinamento.localTreinamento ? `, no local: <strong>${treinamento.localTreinamento}</strong>` : ''}.</p>
+        <p>Você demonstrou interesse nesse treinamento — não esqueça de comparecer!</p>
+        <p>Até lá,<br/>Academia Tegra</p>
+      </div>
+    `,
+  });
+}
+
+module.exports = { transporter, enviarEmailRecuperacaoSenha, enviarEmailLembreteTreinamento };
