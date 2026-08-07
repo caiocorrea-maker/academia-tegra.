@@ -214,7 +214,7 @@ function AbaProdutos() {
   const [produtos, setProdutos] = useState([]);
   const [mostrarForm, setMostrarForm] = useState(false);
   const [editando, setEditando] = useState(null);
-  const [form, setForm] = useState({ nome: '', corCalendario: CORES_SUGERIDAS[0] });
+  const [form, setForm] = useState({ nome: '', corCalendario: CORES_SUGERIDAS[0], certificadosNecessarios: 3 });
   const [erro, setErro] = useState('');
 
   async function carregar() {
@@ -223,15 +223,16 @@ function AbaProdutos() {
   }
   useEffect(() => { carregar(); }, []);
 
-  function abrirNovo() { setEditando(null); setForm({ nome: '', corCalendario: CORES_SUGERIDAS[0] }); setMostrarForm(true); }
-  function abrirEdicao(p) { setEditando(p); setForm({ nome: p.nome, corCalendario: p.corCalendario }); setMostrarForm(true); }
+  function abrirNovo() { setEditando(null); setForm({ nome: '', corCalendario: CORES_SUGERIDAS[0], certificadosNecessarios: 3 }); setMostrarForm(true); }
+  function abrirEdicao(p) { setEditando(p); setForm({ nome: p.nome, corCalendario: p.corCalendario, certificadosNecessarios: p.certificadosNecessarios || 3 }); setMostrarForm(true); }
 
   async function salvar(e) {
     e.preventDefault();
     setErro('');
     try {
-      if (editando) await api.put(`/produtos/${editando.id}`, form);
-      else await api.post('/produtos', form);
+      const payload = { ...form, certificadosNecessarios: Number(form.certificadosNecessarios) };
+      if (editando) await api.put(`/produtos/${editando.id}`, payload);
+      else await api.post('/produtos', payload);
       setMostrarForm(false);
       carregar();
     } catch (err) {
@@ -252,12 +253,13 @@ function AbaProdutos() {
         <button className="btn" onClick={abrirNovo}>+ Novo produto</button>
       </div>
       <table>
-        <thead><tr><th>Nome</th><th>Cor</th><th></th></tr></thead>
+        <thead><tr><th>Nome</th><th>Cor</th><th>Certificados p/ aptidão</th><th></th></tr></thead>
         <tbody>
           {produtos.map((p) => (
             <tr key={p.id}>
               <td>{p.nome}</td>
               <td><span style={{ display: 'inline-block', width: 18, height: 18, borderRadius: 4, background: p.corCalendario }} /></td>
+              <td>{p.certificadosNecessarios || 3}</td>
               <td style={{ display: 'flex', gap: 8 }}>
                 <button className="btn-link" onClick={() => abrirEdicao(p)}>Editar</button>
                 <button className="btn-link" style={{ color: '#dc2626' }} onClick={() => inativar(p)}>Inativar</button>
@@ -289,6 +291,14 @@ function AbaProdutos() {
                     />
                   ))}
                 </div>
+              </div>
+              <div className="campo">
+                <label>Certificados válidos necessários para o corretor ficar "apto a plantão" neste produto</label>
+                <input
+                  type="number" min={1} value={form.certificadosNecessarios}
+                  onChange={(e) => setForm((f) => ({ ...f, certificadosNecessarios: e.target.value }))}
+                  required
+                />
               </div>
               {erro && <p className="erro">{erro}</p>}
               <div style={{ display: 'flex', gap: 8 }}>

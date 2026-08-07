@@ -1,17 +1,28 @@
 import { useEffect, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import Layout from '../components/Layout';
 import FormularioTreinamento from '../components/FormularioTreinamento';
 import TreinamentoModal from '../components/TreinamentoModal';
+import GerenciarProvasModal from '../components/GerenciarProvasModal';
 import api from '../services/api';
 
 export default function Treinamentos() {
+  const [searchParams] = useSearchParams();
   const [produtos, setProdutos] = useState([]);
   const [supervisores, setSupervisores] = useState([]);
   const [historico, setHistorico] = useState([]);
-  const [filtros, setFiltros] = useState({ produtoId: '', supervisorId: '', dataInicio: '', dataFim: '' });
+  const [filtros, setFiltros] = useState({
+    produtoId: '',
+    supervisorId: searchParams.get('supervisorId') || '',
+    dataInicio: '',
+    dataFim: '',
+  });
   const [mostrarForm, setMostrarForm] = useState(false);
+  const [mostrarProvas, setMostrarProvas] = useState(false);
   const [selecionado, setSelecionado] = useState(null);
   const [carregando, setCarregando] = useState(true);
+
+  const supervisorNomeFiltro = searchParams.get('supervisorNome');
 
   async function carregarBase() {
     const [pRes, sRes] = await Promise.all([
@@ -33,13 +44,15 @@ export default function Treinamentos() {
   useEffect(() => { carregarBase(); }, []);
   useEffect(() => { carregarHistorico(); }, [filtros]);
 
-  async function exportar() {
+  async function exportar(tipo) {
     const params = Object.fromEntries(Object.entries(filtros).filter(([, v]) => v));
-    const res = await api.get('/exportar/treinamentos', { params, responseType: 'blob' });
+    const rota = tipo === 'presenca' ? '/exportar/presencas' : '/exportar/treinamentos';
+    const nomeArquivo = tipo === 'presenca' ? 'presenca_academia_tegra.xlsx' : 'treinamentos_academia_tegra.xlsx';
+    const res = await api.get(rota, { params, responseType: 'blob' });
     const url = window.URL.createObjectURL(new Blob([res.data]));
     const link = document.createElement('a');
     link.href = url;
-    link.download = 'treinamentos_academia_tegra.xlsx';
+    link.download = nomeArquivo;
     link.click();
   }
 
@@ -47,11 +60,20 @@ export default function Treinamentos() {
     <Layout>
       <div className="topo-pagina">
         <h2 style={{ margin: 0 }}>Treinamentos</h2>
-        <div style={{ display: 'flex', gap: 8 }}>
-          <button className="btn btn-secundario" onClick={exportar}>Exportar Excel</button>
+        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+          <button className="btn btn-secundario" onClick={() => exportar('resumo')}>Exportar Excel (resumo)</button>
+          <button className="btn btn-secundario" onClick={() => exportar('presenca')}>Extração de presença</button>
+          <button className="btn btn-secundario" onClick={() => setMostrarProvas(true)}>Gerenciar Provas</button>
           <button className="btn" onClick={() => setMostrarForm(true)}>+ Novo Treinamento</button>
         </div>
       </div>
+
+      {supervisorNomeFiltro && filtros.supervisorId && (
+        <p style={{ fontSize: 13, color: '#666', marginTop: -10, marginBottom: 14 }}>
+          Filtrando por supervisor: <strong>{supervisorNomeFiltro}</strong>{' '}
+          <button className="btn-link" onClick={() => setFiltros((f) => ({ ...f, supervisorId: '' }))}>(limpar)</button>
+        </p>
+      )}
 
       <div className="filtros">
         <select value={filtros.produtoId} onChange={(e) => setFiltros((f) => ({ ...f, produtoId: e.target.value }))}>
@@ -112,6 +134,10 @@ export default function Treinamentos() {
           aoFechar={() => setSelecionado(null)}
           aoAtualizar={carregarHistorico}
         />
+      )}
+
+      {mostrarProvas && (
+        <GerenciarProvasModal produtos={produtos} aoFechar={() => setMostrarProvas(false)} />
       )}
     </Layout>
   );

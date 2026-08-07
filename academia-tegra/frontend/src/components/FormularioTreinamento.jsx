@@ -15,6 +15,7 @@ export default function FormularioTreinamento({ produtos, treinamentoExistente, 
   );
   const [horario, setHorario] = useState(treinamentoExistente?.horario || '');
   const [tema, setTema] = useState(treinamentoExistente?.tema || '');
+  const [localTreinamento, setLocalTreinamento] = useState(treinamentoExistente?.localTreinamento || '');
   const [plano, setPlano] = useState(treinamentoExistente?.planoTreinamento || '');
   const [temProva, setTemProva] = useState(treinamentoExistente ? treinamentoExistente.temProva : true);
   const [provaId, setProvaId] = useState(treinamentoExistente?.prova?.id || '');
@@ -57,6 +58,7 @@ export default function FormularioTreinamento({ produtos, treinamentoExistente, 
     try {
       const payload = {
         produtoId, data, horario, tema,
+        localTreinamento,
         planoTreinamento: plano,
         temProva,
         provaId: temProva ? provaId : null,
@@ -115,6 +117,10 @@ export default function FormularioTreinamento({ produtos, treinamentoExistente, 
           <div className="campo">
             <label>Tema</label>
             <input value={tema} onChange={(e) => setTema(e.target.value)} required />
+          </div>
+          <div className="campo">
+            <label>Local do treinamento</label>
+            <input value={localTreinamento} onChange={(e) => setLocalTreinamento(e.target.value)} placeholder="Ex: Sala de reuniões, Auditório, Filial X..." />
           </div>
           <div className="campo">
             <label>Plano de treinamento</label>

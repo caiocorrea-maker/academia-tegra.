@@ -127,7 +127,9 @@ export default function TreinamentoModal({ treinamentoId, aoFechar, aoAtualizar 
 
             <p><strong>Supervisor:</strong> {dados.supervisor.nome}</p>
             <p><strong>Data:</strong> {new Date(dados.data).toLocaleDateString('pt-BR')} às {dados.horario}</p>
-            <p><strong>Plano de treinamento:</strong> {dados.planoTreinamento}</p>
+            {dados.localTreinamento && <p><strong>Local:</strong> {dados.localTreinamento}</p>}
+            <p><strong>Plano de treinamento:</strong></p>
+            <p style={{ whiteSpace: 'pre-line' }}>{dados.planoTreinamento}</p>
 
             <div style={{ display: 'flex', gap: 16, margin: '12px 0' }}>
               <span><strong>{dados.qtdInteressados}</strong> interessados</span>

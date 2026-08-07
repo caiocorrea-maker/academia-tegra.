@@ -11,7 +11,7 @@ export default function PerfilCorretor() {
   const navigate = useNavigate();
   const [dados, setDados] = useState(null);
   const [editando, setEditando] = useState(false);
-  const [form, setForm] = useState({ nome: '', email: '', senha: '', gerente: '', diretor: '' });
+  const [form, setForm] = useState({ nome: '', email: '', senha: '', gerente: '', diretor: '', creci: '' });
   const [mensagem, setMensagem] = useState('');
   const [erro, setErro] = useState('');
   const [excluindo, setExcluindo] = useState(false);
@@ -21,7 +21,10 @@ export default function PerfilCorretor() {
   async function carregar() {
     const res = await api.get(`/corretores/${id}`);
     setDados(res.data);
-    setForm({ nome: res.data.nome, email: res.data.email, senha: '', gerente: res.data.gerente || '', diretor: res.data.diretor || '' });
+    setForm({
+      nome: res.data.nome, email: res.data.email, senha: '',
+      gerente: res.data.gerente || '', diretor: res.data.diretor || '', creci: res.data.creci || '',
+    });
   }
 
   useEffect(() => { carregar(); }, [id]);
@@ -30,7 +33,7 @@ export default function PerfilCorretor() {
     e.preventDefault();
     setErro(''); setMensagem('');
     try {
-      const payload = { nome: form.nome, email: form.email, gerente: form.gerente, diretor: form.diretor };
+      const payload = { nome: form.nome, email: form.email, gerente: form.gerente, diretor: form.diretor, creci: form.creci };
       if (form.senha) payload.senha = form.senha;
       await api.put('/corretores/perfil/me', payload);
       setMensagem('Dados atualizados com sucesso.');
@@ -40,8 +43,6 @@ export default function PerfilCorretor() {
       setErro(err.response?.data?.erro || 'Não foi possível salvar.');
     }
   }
-
-  if (!dados) return <Layout><p>Carregando...</p></Layout>;
 
   async function excluir() {
     if (!confirm(`Tem certeza que deseja excluir o corretor "${dados.nome}"? Essa ação não pode ser desfeita.`)) return;
@@ -55,6 +56,8 @@ export default function PerfilCorretor() {
     }
   }
 
+  if (!dados) return <Layout><p>Carregando...</p></Layout>;
+
   return (
     <Layout>
       <h2>Perfil do Corretor</h2>
@@ -64,6 +67,7 @@ export default function PerfilCorretor() {
           <>
             <p><strong>Nome:</strong> {dados.nome}</p>
             <p><strong>CPF:</strong> {formatarCPF(dados.cpf)}</p>
+            <p><strong>CRECI:</strong> {dados.creci || '-'}</p>
             <p><strong>E-mail:</strong> {dados.email}</p>
             <p><strong>Empresa:</strong> {dados.empresa?.nome}</p>
             <p><strong>Gerente:</strong> {dados.gerente || '-'}</p>
@@ -84,6 +88,10 @@ export default function PerfilCorretor() {
             <div className="campo">
               <label>E-mail</label>
               <input type="email" value={form.email} onChange={(e) => setForm((f) => ({ ...f, email: e.target.value }))} required />
+            </div>
+            <div className="campo">
+              <label>CRECI</label>
+              <input value={form.creci} onChange={(e) => setForm((f) => ({ ...f, creci: e.target.value }))} />
             </div>
             <div className="campo">
               <label>Gerente</label>
@@ -107,19 +115,38 @@ export default function PerfilCorretor() {
         {mensagem && <p className="sucesso">{mensagem}</p>}
       </div>
 
-      <h3>Certificados</h3>
-      <div className="grade-cards">
-        {dados.certificados.map((c) => (
-          <div key={c.id} className="card">
-            <strong>{c.treinamento.produto.nome}</strong>
-            <p style={{ fontSize: 13, margin: '4px 0' }}>{c.treinamento.tema}</p>
-            <p style={{ fontSize: 13, margin: '4px 0' }}>Aproveitamento: {c.percentual.toFixed(0)}%</p>
-            <p style={{ fontSize: 12, color: '#888' }}>{new Date(c.emitidoEm).toLocaleDateString('pt-BR')}</p>
-            <a href={c.urlArquivo} target="_blank" rel="noreferrer" className="btn-link">Ver certificado</a>
+      <h3>Certificados por Produto</h3>
+      {dados.certificadosPorProduto.length === 0 && <p style={{ color: '#888' }}>Nenhum certificado emitido ainda.</p>}
+
+      {dados.certificadosPorProduto.map((grupo) => (
+        <div key={grupo.produto.id} className="card" style={{ marginBottom: 16 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10 }}>
+            <span className="badge" style={{ background: grupo.produto.corCalendario, color: '#fff' }}>{grupo.produto.nome}</span>
+            {grupo.apto ? (
+              <span title="Apto a tirar plantão" style={{ color: '#16a34a', fontWeight: 700, fontSize: 18 }}>✔</span>
+            ) : (
+              <span title="Não apto a tirar plantão" style={{ color: '#dc2626', fontWeight: 700, fontSize: 18 }}>✕</span>
+            )}
+            <span style={{ fontSize: 13, color: '#666' }}>
+              {grupo.qtdCertificadosValidos} de {grupo.certificadosNecessarios} certificados válidos necessários
+            </span>
           </div>
-        ))}
-        {dados.certificados.length === 0 && <p style={{ color: '#888' }}>Nenhum certificado emitido ainda.</p>}
-      </div>
+
+          <div className="grade-cards">
+            {grupo.certificados.map((c) => (
+              <div key={c.id} className="card" style={{ borderColor: c.valido ? '#16a34a' : '#e2e2ea' }}>
+                <p style={{ fontSize: 13, margin: '4px 0' }}>{c.tema}</p>
+                <p style={{ fontSize: 13, margin: '4px 0' }}>Aproveitamento: {c.percentual.toFixed(0)}%</p>
+                <p style={{ fontSize: 12, color: '#888' }}>Emitido em {new Date(c.emitidoEm).toLocaleDateString('pt-BR')}</p>
+                <p style={{ fontSize: 12, color: c.valido ? '#16a34a' : '#dc2626' }}>
+                  {c.valido ? `Válido até ${new Date(c.validoAte).toLocaleDateString('pt-BR')}` : 'Expirado'}
+                </p>
+                <a href={c.url} target="_blank" rel="noreferrer" className="btn-link">Ver certificado</a>
+              </div>
+            ))}
+          </div>
+        </div>
+      ))}
     </Layout>
   );
 }
