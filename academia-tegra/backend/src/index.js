@@ -21,6 +21,11 @@ const cronRoutes = require('./routes/cronRoutes');
 
 const app = express();
 
+// O Render (e a maioria dos provedores de hospedagem) coloca a aplicação atrás de um
+// proxy reverso. Sem isso, o express-rate-limit não consegue identificar corretamente o
+// IP de quem está fazendo a requisição a partir do cabeçalho X-Forwarded-For.
+app.set('trust proxy', 1);
+
 app.use(helmet());
 app.use(cors({ origin: process.env.FRONTEND_URL || '*' }));
 app.use(express.json({ limit: '2mb' }));
