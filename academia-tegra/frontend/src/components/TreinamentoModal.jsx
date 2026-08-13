@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import api from '../services/api';
 import FormularioTreinamento from './FormularioTreinamento';
@@ -7,11 +8,12 @@ export default function TreinamentoModal({ treinamentoId, aoFechar, aoAtualizar 
   const { usuario } = useAuth();
   const [dados, setDados] = useState(null);
   const [carregando, setCarregando] = useState(true);
-  const [liberacao, setLiberacao] = useState(null);
   const [erro, setErro] = useState('');
   const [editando, setEditando] = useState(false);
   const [produtos, setProdutos] = useState([]);
   const [excluindo, setExcluindo] = useState(false);
+  const [liberando, setLiberando] = useState(false);
+  const [alterandoPresenca, setAlterandoPresenca] = useState('');
 
   async function carregar() {
     setCarregando(true);
@@ -46,14 +48,29 @@ export default function TreinamentoModal({ treinamentoId, aoFechar, aoAtualizar 
     }
   }
 
-  async function liberar() {
+  async function liberarProva() {
     setErro('');
+    setLiberando(true);
     try {
-      const res = await api.post(`/treinamentos/${treinamentoId}/liberar`);
-      setLiberacao(res.data);
+      await api.post(`/treinamentos/${treinamentoId}/liberar`);
       await carregar();
     } catch (err) {
-      setErro(err.response?.data?.erro || 'Não foi possível liberar.');
+      setErro(err.response?.data?.erro || 'Não foi possível liberar a prova.');
+    } finally {
+      setLiberando(false);
+    }
+  }
+
+  async function alternarPresenca(corretorId, confirmado) {
+    setErro('');
+    setAlterandoPresenca(corretorId);
+    try {
+      await api.put(`/treinamentos/${treinamentoId}/presencas/${corretorId}`, { confirmado });
+      await carregar();
+    } catch (err) {
+      setErro(err.response?.data?.erro || 'Não foi possível atualizar a presença.');
+    } finally {
+      setAlterandoPresenca('');
     }
   }
 
@@ -111,6 +128,10 @@ export default function TreinamentoModal({ treinamentoId, aoFechar, aoAtualizar 
     );
   }
 
+  const provaDentroDoPrazo = dados?.liberadoExpiraEm && new Date() < new Date(dados.liberadoExpiraEm);
+  const podeFazerProva = usuario.perfil === 'CORRETOR' && dados?.temProva && dados?.minhaPresencaConfirmada
+    && provaDentroDoPrazo && dados?.minhaTentativa?.status !== 'CONCLUIDA';
+
   return (
     <div className="modal-fundo" onClick={aoFechar}>
       <div className="modal-caixa" onClick={(e) => e.stopPropagation()}>
@@ -145,6 +166,30 @@ export default function TreinamentoModal({ treinamentoId, aoFechar, aoAtualizar 
               </button>
             )}
 
+            {usuario.perfil === 'CORRETOR' && dados.temProva && (
+              <div style={{ marginTop: 12 }}>
+                {!dados.minhaPresencaConfirmada && (
+                  <p style={{ fontSize: 13, color: '#888' }}>
+                    Sua presença ainda não foi confirmada pelo supervisor. Assim que for confirmada, e a prova estiver liberada, o acesso aparece aqui.
+                  </p>
+                )}
+                {dados.minhaTentativa?.status === 'CONCLUIDA' && (
+                  <p className={dados.minhaTentativa.aprovado ? 'sucesso' : 'erro'}>
+                    {dados.minhaTentativa.aprovado ? '✅ Aprovado' : '❌ Não aprovado'} — {dados.minhaTentativa.percentual.toFixed(0)}%
+                  </p>
+                )}
+                {podeFazerProva && (
+                  <Link className="btn" to={`/prova/${dados.id}`}>Fazer prova</Link>
+                )}
+                {dados.minhaPresencaConfirmada && dados.minhaTentativa?.status !== 'CONCLUIDA' && !provaDentroDoPrazo && dados.liberadoEm && (
+                  <p style={{ fontSize: 13, color: '#888' }}>O prazo de 1h para realizar a prova encerrou.</p>
+                )}
+                {dados.minhaPresencaConfirmada && !dados.liberadoEm && dados.minhaTentativa?.status !== 'CONCLUIDA' && (
+                  <p style={{ fontSize: 13, color: '#888' }}>Presença confirmada. Aguarde o supervisor liberar a prova.</p>
+                )}
+              </div>
+            )}
+
             {podeGerenciar && (
               <div style={{ display: 'flex', gap: 8, marginBottom: 4 }}>
                 <button className="btn btn-secundario" onClick={abrirEdicao}>Editar</button>
@@ -173,21 +218,49 @@ export default function TreinamentoModal({ treinamentoId, aoFechar, aoAtualizar 
 
             {podeGerenciar && (
               <div style={{ marginTop: 20, borderTop: '1px solid #eee', paddingTop: 16 }}>
-                {!dados.liberadoEm && (
-                  <button className="btn" onClick={liberar}>
-                    {dados.temProva ? 'Liberar Prova' : 'Liberar Confirmação de Presença'}
-                  </button>
-                )}
-                {dados.liberadoEm && new Date() < new Date(dados.liberadoExpiraEm) && (
-                  <p className="sucesso">Liberado até {new Date(dados.liberadoExpiraEm).toLocaleTimeString('pt-BR')}</p>
-                )}
-                {dados.liberadoEm && new Date() >= new Date(dados.liberadoExpiraEm) && (
-                  <p style={{ color: '#888' }}>Prazo de liberação encerrado (validade de 1h).</p>
-                )}
-                {liberacao && (
-                  <div style={{ marginTop: 12, textAlign: 'center' }}>
-                    <img src={liberacao.qrCodeDataUrl} alt="QR Code" style={{ width: 160, height: 160 }} />
-                    <p style={{ fontSize: 12, wordBreak: 'break-all' }}>{liberacao.link}</p>
+                <strong>Lista de interessados</strong>
+                <p style={{ fontSize: 12, color: '#888', marginTop: 4 }}>
+                  Confirme manualmente a presença de cada corretor que efetivamente compareceu.
+                </p>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginTop: 8 }}>
+                  {(dados.interessados || []).map((c) => (
+                    <div key={c.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', border: '1px solid #eee', borderRadius: 8, padding: '6px 10px' }}>
+                      <div>
+                        <span>{c.nome}</span>
+                        {dados.temProva && c.tentativa?.status === 'CONCLUIDA' && (
+                          <span style={{ marginLeft: 8, fontSize: 12, color: c.tentativa.aprovado ? '#16a34a' : '#dc2626' }}>
+                            {c.tentativa.aprovado ? 'Aprovado' : 'Reprovado'} ({c.tentativa.percentual.toFixed(0)}%)
+                          </span>
+                        )}
+                      </div>
+                      <button
+                        className={`btn ${c.presencaConfirmada ? 'btn-secundario' : ''}`}
+                        style={{ padding: '4px 10px', fontSize: 12 }}
+                        disabled={alterandoPresenca === c.id}
+                        onClick={() => alternarPresenca(c.id, !c.presencaConfirmada)}
+                      >
+                        {alterandoPresenca === c.id ? '...' : c.presencaConfirmada ? '✔ Presença confirmada' : 'Confirmar presença'}
+                      </button>
+                    </div>
+                  ))}
+                  {(dados.interessados || []).length === 0 && (
+                    <span style={{ fontSize: 13, color: '#888' }}>Nenhum corretor demonstrou interesse ainda.</span>
+                  )}
+                </div>
+
+                {dados.temProva && (
+                  <div style={{ marginTop: 16 }}>
+                    {!dados.liberadoEm && (
+                      <button className="btn" onClick={liberarProva} disabled={liberando}>
+                        {liberando ? 'Liberando...' : 'Liberar Prova'}
+                      </button>
+                    )}
+                    {dados.liberadoEm && provaDentroDoPrazo && (
+                      <p className="sucesso">Prova liberada até {new Date(dados.liberadoExpiraEm).toLocaleTimeString('pt-BR')}. Corretores com presença confirmada já podem acessá-la pela tela do treinamento.</p>
+                    )}
+                    {dados.liberadoEm && !provaDentroDoPrazo && (
+                      <p style={{ color: '#888' }}>Prazo de liberação encerrado (validade de 1h).</p>
+                    )}
                   </div>
                 )}
               </div>

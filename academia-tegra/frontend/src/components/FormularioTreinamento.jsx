@@ -21,6 +21,7 @@ export default function FormularioTreinamento({ produtos, treinamentoExistente, 
   const [provaId, setProvaId] = useState(treinamentoExistente?.prova?.id || '');
   const [provasDisponiveis, setProvasDisponiveis] = useState([]);
   const [mostrarFormProva, setMostrarFormProva] = useState(false);
+  const [sugestoes, setSugestoes] = useState([]);
   const [erro, setErro] = useState('');
   const [salvando, setSalvando] = useState(false);
 
@@ -34,6 +35,26 @@ export default function FormularioTreinamento({ produtos, treinamentoExistente, 
     if (!produtoId) { setProvasDisponiveis([]); return; }
     api.get('/provas/modelos', { params: { produtoId } }).then((res) => setProvasDisponiveis(res.data));
   }, [produtoId]);
+
+  // Sugestão de nome / preenchimento automático (só ao criar um novo treinamento): busca os
+  // treinamentos com certificado já cadastrados para o produto escolhido, para sugerir o nome
+  // e, ao selecionar, preencher local/plano/prova com a versão mais recentemente editada.
+  useEffect(() => {
+    if (editando || !produtoId) { setSugestoes([]); return; }
+    api.get('/treinamentos/sugestoes', { params: { produtoId } }).then((res) => setSugestoes(res.data));
+  }, [produtoId, editando]);
+
+  function aoEscolherTema(valor) {
+    setTema(valor);
+    if (editando) return;
+    const sugestao = sugestoes.find((s) => s.tema.trim().toLowerCase() === valor.trim().toLowerCase());
+    if (!sugestao) return;
+    // Preenche os demais campos automaticamente, exceto data e horário; tudo continua editável.
+    setLocalTreinamento(sugestao.localTreinamento || '');
+    setPlano(sugestao.planoTreinamento || '');
+    setTemProva(true);
+    setProvaId(sugestao.provaId || '');
+  }
 
   // Quando o admin escolhe um supervisor, só mostramos os produtos vinculados a ele —
   // isso evita que um treinamento seja criado para um supervisor com um produto que ele
@@ -116,7 +137,22 @@ export default function FormularioTreinamento({ produtos, treinamentoExistente, 
           </div>
           <div className="campo">
             <label>Tema</label>
-            <input value={tema} onChange={(e) => setTema(e.target.value)} required />
+            <input
+              value={tema}
+              onChange={(e) => aoEscolherTema(e.target.value)}
+              list={!editando && sugestoes.length > 0 ? 'sugestoes-tema' : undefined}
+              required
+            />
+            {!editando && sugestoes.length > 0 && (
+              <datalist id="sugestoes-tema">
+                {sugestoes.map((s) => <option key={s.tema} value={s.tema} />)}
+              </datalist>
+            )}
+            {!editando && sugestoes.length > 0 && (
+              <span style={{ fontSize: 12, color: '#888' }}>
+                Dica: escolha um nome já usado para preencher local, plano e prova automaticamente (você pode editar depois).
+              </span>
+            )}
           </div>
           <div className="campo">
             <label>Local do treinamento</label>
@@ -151,7 +187,7 @@ export default function FormularioTreinamento({ produtos, treinamentoExistente, 
 
           {!temProva && (
             <p style={{ fontSize: 13, color: '#666' }}>
-              Sem prova: será gerado um QR Code/Link único para confirmação de presença (válido por 1h após a liberação).
+              Sem prova: a presença deste treinamento será confirmada manualmente pelo supervisor/administrador na lista de interessados.
             </p>
           )}
 

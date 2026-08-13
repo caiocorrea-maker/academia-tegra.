@@ -27,6 +27,7 @@ export default function Layout({ children }) {
           {usuario?.perfil !== 'CORRETOR' && (
             <NavLink to="/treinamentos" className={({ isActive }) => (isActive ? 'ativo' : '')}>Treinamentos</NavLink>
           )}
+          <NavLink to="/biblioteca" className={({ isActive }) => (isActive ? 'ativo' : '')}>Biblioteca de Treinamentos</NavLink>
           {usuario?.perfil === 'ADMIN' && (
             <NavLink to="/admin" className={({ isActive }) => (isActive ? 'ativo' : '')}>Painel do Administrador</NavLink>
           )}

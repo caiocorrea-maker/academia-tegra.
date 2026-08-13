@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import Layout from '../components/Layout';
+import CarteirinhaCorretor from '../components/CarteirinhaCorretor';
 import { useAuth } from '../context/AuthContext';
 import { formatarCPF } from '../utils/formatadores';
 import api from '../services/api';
@@ -61,6 +62,10 @@ export default function PerfilCorretor() {
   return (
     <Layout>
       <h2>Perfil do Corretor</h2>
+
+      <div style={{ marginBottom: 20 }}>
+        <CarteirinhaCorretor dados={dados} podeEditarFoto={ehProprioPerfil} aoAtualizarFoto={carregar} />
+      </div>
 
       <div className="card" style={{ marginBottom: 20 }}>
         {!editando ? (

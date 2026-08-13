@@ -12,7 +12,7 @@ import Corretores from './pages/Corretores';
 import PerfilCorretor from './pages/PerfilCorretor';
 import PainelAdmin from './pages/PainelAdmin';
 import ResponderProva from './pages/ResponderProva';
-import ConfirmarPresenca from './pages/ConfirmarPresenca';
+import Biblioteca from './pages/Biblioteca';
 
 export default function App() {
   return (
@@ -38,13 +38,12 @@ export default function App() {
       } />
       <Route path="/corretores/:id" element={<RotaProtegida><PerfilCorretor /></RotaProtegida>} />
 
+      <Route path="/biblioteca" element={<RotaProtegida><Biblioteca /></RotaProtegida>} />
+
       <Route path="/admin" element={<RotaProtegida perfis={['ADMIN']}><PainelAdmin /></RotaProtegida>} />
 
       <Route path="/prova/:treinamentoId" element={
         <RotaProtegida perfis={['CORRETOR']}><ResponderProva /></RotaProtegida>
-      } />
-      <Route path="/presenca/:treinamentoId" element={
-        <RotaProtegida perfis={['CORRETOR']}><ConfirmarPresenca /></RotaProtegida>
       } />
 
       <Route path="*" element={<Navigate to="/agenda" replace />} />
