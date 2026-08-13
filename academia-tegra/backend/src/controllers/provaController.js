@@ -147,11 +147,20 @@ async function iniciar(req, res) {
     throw new HttpError(400, 'Este treinamento não possui prova.');
   }
 
-  if (!treinamento.qrToken || !treinamento.liberadoExpiraEm) {
+  if (!treinamento.liberadoEm || !treinamento.liberadoExpiraEm) {
     throw new HttpError(400, 'A prova ainda não foi liberada pelo supervisor.');
   }
   if (new Date() > treinamento.liberadoExpiraEm) {
     throw new HttpError(400, 'O prazo de 1 hora para realizar a prova expirou.');
+  }
+
+  // A prova só pode ser acessada por quem já teve a presença confirmada manualmente
+  // pelo supervisor/admin (item 4 e 5 das melhorias).
+  const presenca = await prisma.presenca.findUnique({
+    where: { treinamentoId_corretorId: { treinamentoId, corretorId: req.usuario.id } },
+  });
+  if (!presenca) {
+    throw new HttpError(403, 'Sua presença neste treinamento ainda não foi confirmada pelo supervisor/administrador.');
   }
 
   const existente = await prisma.tentativaProva.findUnique({

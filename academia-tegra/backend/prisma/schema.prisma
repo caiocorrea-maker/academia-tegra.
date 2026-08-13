@@ -33,6 +33,7 @@ model Usuario {
   gerente       String?
   diretor       String?
   creci         String?
+  fotoUrl       String?  // chave da foto de perfil (carteirinha), no bucket S3-compatível
 
   // Relações
   produtosVinculados   ProdutoSupervisor[]      // Somente SUPERVISOR
@@ -42,6 +43,7 @@ model Usuario {
   tentativasProva      TentativaProva[]
   certificados         Certificado[]
   resetTokens          PasswordResetToken[]
+  materiaisCriados     MaterialBiblioteca[]
 
   @@index([perfil])
   @@index([empresaId])
@@ -76,6 +78,7 @@ model Produto {
   supervisores   ProdutoSupervisor[]
   treinamentos   Treinamento[]
   provasModelo   ProvaModelo[]
+  materiais      MaterialBiblioteca[]
 }
 
 // Tabela associativa: quais produtos cada supervisor gerencia
@@ -114,10 +117,10 @@ model Treinamento {
   provaId           String?
   prova             ProvaModelo? @relation(fields: [provaId], references: [id])
 
-  // Controle de liberação da prova / QR de presença
+  // Controle de liberação da prova (o corretor acessa direto pela tela do treinamento,
+  // desde que tenha presença confirmada manualmente pelo supervisor/admin)
   liberadoEm        DateTime?
   liberadoExpiraEm  DateTime? // liberadoEm + 1h
-  qrToken           String?   @unique // usado tanto para prova quanto para presença sem prova
 
   criadoEm          DateTime  @default(now())
   atualizadoEm      DateTime  @updatedAt
@@ -156,7 +159,8 @@ model InteresseTreinamento {
   @@unique([treinamentoId, corretorId])
 }
 
-// Presença confirmada quando NÃO há prova (via QR/link)
+// Presença confirmada manualmente pelo Supervisor/Admin a partir da lista de interessados
+// (vale para treinamentos com ou sem prova)
 model Presenca {
   id             String      @id @default(uuid())
   treinamentoId  String
@@ -247,4 +251,30 @@ model Certificado {
   emitidoEm      DateTime    @default(now())
 
   @@unique([treinamentoId, corretorId])
+}
+
+// Biblioteca de Treinamentos: materiais em PDF/PPT para consulta e download.
+// Visível a todos os perfis; cadastro/edição/exclusão restritos a Admin e Supervisor.
+model MaterialBiblioteca {
+  id                 String   @id @default(uuid())
+  produtoId          String
+  produto            Produto  @relation(fields: [produtoId], references: [id])
+  nome               String
+  descricao          String?  @db.Text
+  urlArquivo         String   // chave do arquivo no bucket
+  nomeArquivo        String
+  tipoArquivo        String   // mime type
+  tamanhoBytes        Int
+
+  // Se preenchido com o "tema" de um treinamento que gera certificado, o material só fica
+  // acessível a corretores com certificado válido daquele treinamento. Se vazio, é público
+  // a todos os perfis.
+  treinamentoNomeRef String?
+
+  criadoPorId        String
+  criadoPor          Usuario  @relation(fields: [criadoPorId], references: [id])
+  criadoEm           DateTime @default(now())
+  atualizadoEm       DateTime @updatedAt
+
+  @@index([produtoId])
 }

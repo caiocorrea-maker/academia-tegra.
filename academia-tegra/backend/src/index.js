@@ -18,6 +18,7 @@ const provaRoutes = require('./routes/provaRoutes');
 const certificadoRoutes = require('./routes/certificadoRoutes');
 const exportRoutes = require('./routes/exportRoutes');
 const cronRoutes = require('./routes/cronRoutes');
+const bibliotecaRoutes = require('./routes/bibliotecaRoutes');
 
 const app = express();
 
@@ -45,6 +46,7 @@ app.use('/api/provas', provaRoutes);
 app.use('/api/certificados', certificadoRoutes);
 app.use('/api/exportar', exportRoutes);
 app.use('/api/cron', cronRoutes);
+app.use('/api/biblioteca', bibliotecaRoutes);
 
 app.use((req, res) => res.status(404).json({ erro: 'Rota não encontrada.' }));
 app.use(errorHandler);

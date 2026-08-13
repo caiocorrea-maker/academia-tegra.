@@ -1,5 +1,3 @@
-const crypto = require('crypto');
-const QRCode = require('qrcode');
 const sharp = require('sharp');
 const prisma = require('../config/prisma');
 const { treinamentoSchema } = require('../utils/schemas');
@@ -28,14 +26,13 @@ function montarDataHora(dataArmazenada, horario) {
 }
 
 async function contarMetricas(treinamentoId) {
-  const [interessados, presencasSemProva, tentativasConcluidas] = await Promise.all([
+  // Presença agora é sempre confirmada manualmente pelo supervisor/admin (independe de
+  // haver prova ou não). Aprovados continua vindo das tentativas de prova concluídas.
+  const [interessados, presentes, aprovados] = await Promise.all([
     prisma.interesseTreinamento.count({ where: { treinamentoId, cancelado: false } }),
     prisma.presenca.count({ where: { treinamentoId } }),
-    prisma.tentativaProva.findMany({ where: { treinamentoId, status: 'CONCLUIDA' } }),
+    prisma.tentativaProva.count({ where: { treinamentoId, status: 'CONCLUIDA', aprovado: true } }),
   ]);
-
-  const presentes = presencasSemProva + tentativasConcluidas.length;
-  const aprovados = tentativasConcluidas.filter((t) => t.aprovado).length;
 
   return { interessados, presentes, aprovados };
 }
@@ -121,6 +118,11 @@ async function detalhar(req, res) {
       evidencias: true,
       prova: { include: { questoes: { include: { alternativas: true }, orderBy: { ordem: 'asc' } } } },
       interesses: { where: { cancelado: false }, include: { corretor: { select: { id: true, nome: true } } } },
+      presencas: { select: { corretorId: true } },
+      tentativasProva: {
+        where: { status: 'CONCLUIDA' },
+        select: { corretorId: true, aprovado: true, percentual: true },
+      },
     },
   });
   if (!treinamento) throw new HttpError(404, 'Treinamento não encontrado.');
@@ -139,9 +141,25 @@ async function detalhar(req, res) {
     };
   }
 
-  const meuInteresse = req.usuario.perfil === 'CORRETOR'
-    ? treinamento.interesses.some((i) => i.corretor.id === req.usuario.id)
-    : undefined;
+  const presencaIds = new Set(treinamento.presencas.map((p) => p.corretorId));
+  const tentativasMap = new Map(treinamento.tentativasProva.map((t) => [t.corretorId, t]));
+
+  let meuInteresse, minhaPresencaConfirmada, minhaTentativa, interessados;
+
+  if (req.usuario.perfil === 'CORRETOR') {
+    meuInteresse = treinamento.interesses.some((i) => i.corretor.id === req.usuario.id);
+    minhaPresencaConfirmada = presencaIds.has(req.usuario.id);
+    minhaTentativa = tentativasMap.get(req.usuario.id) || null;
+  } else {
+    // Admin/Supervisor: lista de interessados com status de presença e prova, para
+    // confirmar presença manualmente e acompanhar o resultado da prova.
+    interessados = treinamento.interesses.map((i) => ({
+      id: i.corretor.id,
+      nome: i.corretor.nome,
+      presencaConfirmada: presencaIds.has(i.corretor.id),
+      tentativa: tentativasMap.get(i.corretor.id) || null,
+    }));
+  }
 
   res.json({
     id: treinamento.id,
@@ -162,6 +180,9 @@ async function detalhar(req, res) {
     presentes: metricas.presentes,
     aprovados: metricas.aprovados,
     meuInteresse,
+    minhaPresencaConfirmada,
+    minhaTentativa,
+    interessados,
   });
 }
 
@@ -374,7 +395,9 @@ async function cancelarInteresse(req, res) {
   res.json({ mensagem: 'Interesse cancelado.' });
 }
 
-// ---- Liberação de prova / QR de presença (válido por 1h) ----
+// ---- Liberação de prova (válida por 1h) ----
+// O corretor acessa a prova direto pela tela do treinamento (sem link/QR compartilhado),
+// desde que já tenha presença confirmada manualmente pelo supervisor/admin.
 
 async function liberar(req, res) {
   const { id } = req.params;
@@ -382,48 +405,94 @@ async function liberar(req, res) {
   const treinamento = await prisma.treinamento.findUnique({ where: { id } });
   if (!treinamento) throw new HttpError(404, 'Treinamento não encontrado.');
 
+  if (!treinamento.temProva) {
+    throw new HttpError(400, 'Este treinamento não possui prova para liberar.');
+  }
+
   if (req.usuario.perfil === 'SUPERVISOR' && treinamento.supervisorId !== req.usuario.id) {
     throw new HttpError(403, 'Você só pode liberar treinamentos criados por você.');
   }
 
-  const qrToken = crypto.randomBytes(16).toString('hex');
   const liberadoEm = new Date();
   const liberadoExpiraEm = new Date(liberadoEm.getTime() + 60 * 60 * 1000); // 1h
 
   await prisma.treinamento.update({
     where: { id },
-    data: { qrToken, liberadoEm, liberadoExpiraEm },
+    data: { liberadoEm, liberadoExpiraEm },
   });
 
-  const destino = treinamento.temProva
-    ? `${process.env.FRONTEND_URL}/prova/${id}?token=${qrToken}`
-    : `${process.env.FRONTEND_URL}/presenca/${id}?token=${qrToken}`;
-
-  const qrCodeDataUrl = await QRCode.toDataURL(destino);
-
-  res.json({ link: destino, qrCodeDataUrl, liberadoEm, liberadoExpiraEm });
+  res.json({ liberadoEm, liberadoExpiraEm });
 }
 
-// Confirmação de presença via QR/link quando NÃO há prova
-async function confirmarPresenca(req, res) {
-  const { id } = req.params;
-  const { token } = req.body;
+// ---- Confirmação manual de presença (Admin/Supervisor, a partir da lista de interessados) ----
+
+async function definirPresenca(req, res) {
+  const { id, corretorId } = req.params;
+  const { confirmado } = req.body;
 
   const treinamento = await prisma.treinamento.findUnique({ where: { id } });
   if (!treinamento) throw new HttpError(404, 'Treinamento não encontrado.');
-  if (treinamento.temProva) throw new HttpError(400, 'Este treinamento possui prova; a presença é confirmada ao concluí-la.');
-  if (!treinamento.qrToken || treinamento.qrToken !== token) throw new HttpError(400, 'Link/QR inválido.');
-  if (!treinamento.liberadoExpiraEm || new Date() > treinamento.liberadoExpiraEm) {
-    throw new HttpError(400, 'O prazo de confirmação de presença (1h) expirou.');
+
+  if (req.usuario.perfil === 'SUPERVISOR' && treinamento.supervisorId !== req.usuario.id) {
+    throw new HttpError(403, 'Você só pode confirmar presença em treinamentos criados por você.');
   }
 
-  const presenca = await prisma.presenca.upsert({
-    where: { treinamentoId_corretorId: { treinamentoId: id, corretorId: req.usuario.id } },
-    update: {},
-    create: { treinamentoId: id, corretorId: req.usuario.id },
+  const interesse = await prisma.interesseTreinamento.findUnique({
+    where: { treinamentoId_corretorId: { treinamentoId: id, corretorId } },
+  });
+  if (!interesse || interesse.cancelado) {
+    throw new HttpError(400, 'Este corretor não demonstrou interesse neste treinamento.');
+  }
+
+  if (confirmado) {
+    await prisma.presenca.upsert({
+      where: { treinamentoId_corretorId: { treinamentoId: id, corretorId } },
+      update: {},
+      create: { treinamentoId: id, corretorId },
+    });
+  } else {
+    await prisma.presenca.deleteMany({ where: { treinamentoId: id, corretorId } });
+  }
+
+  res.json({ mensagem: confirmado ? 'Presença confirmada.' : 'Presença removida.' });
+}
+
+// ---- Sugestão de nome / preenchimento automático (item 1) ----
+// Lista, por produto, um treinamento representante de cada "tema" já usado em treinamentos
+// com prova (que geram certificado), trazendo sempre a versão mais recentemente editada.
+async function sugestoesPorProduto(req, res) {
+  const { produtoId } = req.query;
+  if (!produtoId) throw new HttpError(400, 'Informe produtoId.');
+
+  const treinamentos = await prisma.treinamento.findMany({
+    where: { produtoId, temProva: true, provaId: { not: null } },
+    orderBy: { atualizadoEm: 'desc' },
+    select: {
+      tema: true,
+      localTreinamento: true,
+      planoTreinamento: true,
+      provaId: true,
+      prova: { select: { titulo: true } },
+    },
   });
 
-  res.status(201).json(presenca);
+  const vistos = new Set();
+  const sugestoes = [];
+  for (const t of treinamentos) {
+    const chave = t.tema.trim().toLowerCase();
+    if (vistos.has(chave)) continue;
+    vistos.add(chave);
+    sugestoes.push({
+      tema: t.tema,
+      localTreinamento: t.localTreinamento,
+      planoTreinamento: t.planoTreinamento,
+      provaId: t.provaId,
+      provaTitulo: t.prova?.titulo,
+    });
+  }
+  sugestoes.sort((a, b) => a.tema.localeCompare(b.tema));
+
+  res.json(sugestoes);
 }
 
 module.exports = {
@@ -438,5 +507,6 @@ module.exports = {
   demonstrarInteresse,
   cancelarInteresse,
   liberar,
-  confirmarPresenca,
+  definirPresenca,
+  sugestoesPorProduto,
 };

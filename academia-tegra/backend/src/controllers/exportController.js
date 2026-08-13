@@ -41,7 +41,7 @@ async function exportarTreinamentos(req, res) {
   sheet.getRow(1).font = { bold: true };
 
   for (const t of treinamentos) {
-    const presentes = t.presencas.length + t.tentativasProva.length;
+    const presentes = t.presencas.length;
     const aprovados = t.tentativasProva.filter((tp) => tp.aprovado).length;
 
     sheet.addRow({
@@ -79,10 +79,6 @@ async function exportarPresencas(req, res) {
     include: {
       produto: { select: { nome: true } },
       presencas: { include: { corretor: { include: { empresa: true } } } },
-      tentativasProva: {
-        where: { status: 'CONCLUIDA' },
-        include: { corretor: { include: { empresa: true } } },
-      },
     },
     orderBy: { data: 'desc' },
   });
@@ -104,11 +100,8 @@ async function exportarPresencas(req, res) {
   sheet.getRow(1).font = { bold: true };
 
   for (const t of treinamentos) {
-    // Presentes = quem confirmou presença sem prova + quem concluiu a prova
-    const presentes = [
-      ...t.presencas.map((p) => p.corretor),
-      ...t.tentativasProva.map((tp) => tp.corretor),
-    ];
+    // Presentes = quem teve a presença confirmada manualmente pelo supervisor/admin
+    const presentes = t.presencas.map((p) => p.corretor);
     for (const corretor of presentes) {
       sheet.addRow({
         nome: corretor.nome,

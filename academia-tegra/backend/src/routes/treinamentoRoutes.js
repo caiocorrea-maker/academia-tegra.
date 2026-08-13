@@ -9,6 +9,10 @@ router.use(autenticar);
 // Agenda / histórico — todos os perfis podem visualizar
 router.get('/agenda', treinamentoController.listarAgenda);
 router.get('/historico', treinamentoController.listarHistorico);
+
+// Sugestão de nome / preenchimento automático ao cadastrar treinamento (Admin/Supervisor)
+router.get('/sugestoes', permitir('ADMIN', 'SUPERVISOR'), treinamentoController.sugestoesPorProduto);
+
 router.get('/:id', treinamentoController.detalhar);
 
 // Cadastro/edição — Admin e Supervisor
@@ -24,8 +28,10 @@ router.delete('/:id/evidencias/:evidenciaId', permitir('ADMIN', 'SUPERVISOR'), t
 router.post('/:id/interesse', permitir('CORRETOR'), treinamentoController.demonstrarInteresse);
 router.delete('/:id/interesse', permitir('CORRETOR'), treinamentoController.cancelarInteresse);
 
-// Liberação de prova/QR de presença
+// Liberação de prova (válida por 1h)
 router.post('/:id/liberar', permitir('ADMIN', 'SUPERVISOR'), treinamentoController.liberar);
-router.post('/:id/confirmar-presenca', permitir('CORRETOR'), treinamentoController.confirmarPresenca);
+
+// Confirmação manual de presença (Admin/Supervisor), a partir da lista de interessados
+router.put('/:id/presencas/:corretorId', permitir('ADMIN', 'SUPERVISOR'), treinamentoController.definirPresenca);
 
 module.exports = router;

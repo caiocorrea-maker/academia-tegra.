@@ -95,6 +95,15 @@ const responderProvaSchema = z.object({
   ),
 });
 
+const materialBibliotecaSchema = z.object({
+  produtoId: z.string().uuid(),
+  nome: z.string().min(3),
+  descricao: z.string().optional(),
+  treinamentoNomeRef: z.string().optional().nullable(),
+});
+
+const editarMaterialBibliotecaSchema = materialBibliotecaSchema.partial();
+
 const esqueciSenhaSchema = z.object({
   email: z.string().email(),
 });
@@ -118,4 +127,6 @@ module.exports = {
   responderProvaSchema,
   esqueciSenhaSchema,
   redefinirSenhaSchema,
+  materialBibliotecaSchema,
+  editarMaterialBibliotecaSchema,
 };

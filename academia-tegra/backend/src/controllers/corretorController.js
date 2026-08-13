@@ -3,7 +3,8 @@ const prisma = require('../config/prisma');
 const { cadastroCorretorSchema, editarCorretorSchema } = require('../utils/schemas');
 const { validarCPF } = require('../utils/cpf');
 const { HttpError } = require('../middleware/errorHandler');
-const { getFileUrl } = require('../config/s3');
+const { getFileUrl, uploadBuffer, deleteFile } = require('../config/s3');
+const sharp = require('sharp');
 
 // Cadastro público/próprio do corretor
 async function cadastrar(req, res) {
@@ -83,7 +84,7 @@ async function detalhar(req, res) {
   const corretor = await prisma.usuario.findUnique({
     where: { id, perfil: 'CORRETOR' },
     select: {
-      id: true, nome: true, cpf: true, email: true, gerente: true, diretor: true, creci: true,
+      id: true, nome: true, cpf: true, email: true, gerente: true, diretor: true, creci: true, fotoUrl: true,
       empresa: { select: { id: true, nome: true } },
       certificados: {
         select: {
@@ -137,6 +138,23 @@ async function detalhar(req, res) {
     })
     .sort((a, b) => a.produto.nome.localeCompare(b.produto.nome));
 
+  // Carteirinha (item 2): precisa de TODOS os produtos ativos, mesmo os que o corretor
+  // ainda não tem nenhum certificado (aparecem com todas as insígnias cinzas/vazias).
+  const todosProdutosAtivos = await prisma.produto.findMany({
+    where: { ativo: true },
+    select: { id: true, nome: true, corCalendario: true, certificadosNecessarios: true },
+    orderBy: { nome: 'asc' },
+  });
+  const carteirinhaProdutos = todosProdutosAtivos.map((produto) => {
+    const grupo = certificadosPorProduto.find((g) => g.produto.id === produto.id);
+    return {
+      produto: { id: produto.id, nome: produto.nome, corCalendario: produto.corCalendario },
+      certificadosNecessarios: produto.certificadosNecessarios,
+      qtdCertificadosValidos: grupo ? grupo.qtdCertificadosValidos : 0,
+      apto: grupo ? grupo.apto : false,
+    };
+  });
+
   res.json({
     id: corretor.id,
     nome: corretor.nome,
@@ -146,8 +164,35 @@ async function detalhar(req, res) {
     diretor: corretor.diretor,
     creci: corretor.creci,
     empresa: corretor.empresa,
+    fotoUrl: await getFileUrl(corretor.fotoUrl),
     certificadosPorProduto,
+    carteirinhaProdutos,
   });
+}
+
+// Upload/atualização da foto de perfil (usada na carteirinha). O próprio corretor sobe a
+// foto; comprimimos (redimensiona + JPEG qualidade reduzida) antes de subir ao bucket, para
+// ocupar pouco espaço.
+async function atualizarFoto(req, res) {
+  if (!req.file) throw new HttpError(400, 'Nenhuma imagem enviada.');
+
+  const corretorAtual = await prisma.usuario.findUnique({ where: { id: req.usuario.id } });
+
+  const bufferComprimido = await sharp(req.file.buffer)
+    .rotate()
+    .resize({ width: 500, height: 500, fit: 'cover' })
+    .jpeg({ quality: 70, mozjpeg: true })
+    .toBuffer();
+
+  const key = await uploadBuffer(bufferComprimido, 'foto-perfil.jpg', 'image/jpeg', 'fotos-perfil');
+
+  await prisma.usuario.update({ where: { id: req.usuario.id }, data: { fotoUrl: key } });
+
+  if (corretorAtual?.fotoUrl) {
+    await deleteFile(corretorAtual.fotoUrl).catch(() => {});
+  }
+
+  res.json({ fotoUrl: await getFileUrl(key) });
 }
 
 // Corretor edita os próprios dados
@@ -212,4 +257,4 @@ async function alternarAtivo(req, res) {
   res.json(atualizado);
 }
 
-module.exports = { cadastrar, listar, detalhar, editarProprio, excluir, alternarAtivo };
+module.exports = { cadastrar, listar, detalhar, editarProprio, excluir, alternarAtivo, atualizarFoto };
