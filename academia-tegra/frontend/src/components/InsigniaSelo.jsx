@@ -1,8 +1,15 @@
-// Insígnia (selo) usada na carteirinha do corretor: um escudo com estrela. Quando
-// "preenchida" (colorida com a cor do produto), representa um certificado válido; quando
-// "vazia" (cinza), representa uma vaga de certificado ainda não alcançada.
+// Insígnia (selo) usada na carteirinha do corretor: um "patch" quadrado com uma roseta/flor
+// bordada ao centro, no estilo de insígnias têxteis — desenho próprio da Academia Tegra.
+// Quando "preenchida" (patch na cor do produto, flor num tom mais claro), representa um
+// certificado válido; quando "vazia" (tudo em cinza), representa uma vaga de certificado
+// ainda não alcançada.
 export default function InsigniaSelo({ preenchida, cor = '#4f46e5', tamanho = 26, titulo }) {
-  const corFinal = preenchida ? cor : '#d1d5db';
+  const corPatch = preenchida ? cor : '#c7cad1';
+  const corBorda = preenchida ? shadeColor(cor, -25) : '#a5a8b0';
+  const corFlor = preenchida ? '#fff4d1' : '#e4e6ea';
+
+  const petalas = Array.from({ length: 8 }, (_, i) => i * 45);
+
   return (
     <svg
       width={tamanho}
@@ -13,16 +20,37 @@ export default function InsigniaSelo({ preenchida, cor = '#4f46e5', tamanho = 26
       style={{ flexShrink: 0 }}
     >
       {titulo && <title>{titulo}</title>}
-      <path
-        d="M12 2 L20 5.5 V11 C20 16 16.5 20 12 22 C7.5 20 4 16 4 11 V5.5 Z"
-        fill={corFinal}
-        stroke={preenchida ? corFinal : '#b8bcc6'}
-        strokeWidth="1"
-      />
-      <path
-        d="M12 7.2 L13.3 10 L16.3 10.4 L14.1 12.5 L14.7 15.5 L12 14 L9.3 15.5 L9.9 12.5 L7.7 10.4 L10.7 10 Z"
-        fill={preenchida ? '#fff' : '#e8e9ee'}
-      />
+
+      {/* Patch quadrado, cantos levemente arredondados, como um bordado têxtil */}
+      <rect x="2" y="2" width="20" height="20" rx="3" fill={corPatch} stroke={corBorda} strokeWidth="1.4" />
+
+      {/* Roseta central com 8 pétalas */}
+      <g transform="translate(12 12)">
+        {petalas.map((angulo) => (
+          <ellipse
+            key={angulo}
+            cx="0"
+            cy="-4.6"
+            rx="2.1"
+            ry="4.3"
+            fill={corFlor}
+            stroke={corBorda}
+            strokeWidth="0.6"
+            transform={`rotate(${angulo})`}
+          />
+        ))}
+        <circle r="1.6" fill={corPatch} stroke={corBorda} strokeWidth="0.6" />
+      </g>
     </svg>
   );
+}
+
+// Escurece/clareia uma cor hexadecimal (percent negativo escurece)
+function shadeColor(hex, percent) {
+  const num = parseInt(hex.replace('#', ''), 16);
+  const amt = Math.round(2.55 * percent);
+  const r = Math.min(255, Math.max(0, (num >> 16) + amt));
+  const g = Math.min(255, Math.max(0, ((num >> 8) & 0x00ff) + amt));
+  const b = Math.min(255, Math.max(0, (num & 0x0000ff) + amt));
+  return `#${((1 << 24) + (r << 16) + (g << 8) + b).toString(16).slice(1)}`;
 }
