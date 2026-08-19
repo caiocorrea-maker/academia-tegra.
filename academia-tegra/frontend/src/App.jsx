@@ -13,6 +13,7 @@ import PerfilCorretor from './pages/PerfilCorretor';
 import PainelAdmin from './pages/PainelAdmin';
 import ResponderProva from './pages/ResponderProva';
 import Biblioteca from './pages/Biblioteca';
+import Dashboard from './pages/Dashboard';
 
 export default function App() {
   return (
@@ -39,6 +40,8 @@ export default function App() {
       <Route path="/corretores/:id" element={<RotaProtegida><PerfilCorretor /></RotaProtegida>} />
 
       <Route path="/biblioteca" element={<RotaProtegida><Biblioteca /></RotaProtegida>} />
+
+      <Route path="/dashboard" element={<RotaProtegida perfis={['ADMIN', 'SUPERVISOR']}><Dashboard /></RotaProtegida>} />
 
       <Route path="/admin" element={<RotaProtegida perfis={['ADMIN']}><PainelAdmin /></RotaProtegida>} />
 
