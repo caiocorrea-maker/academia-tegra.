@@ -63,8 +63,9 @@ async function exportarTreinamentos(req, res) {
   res.end();
 }
 
-// Exporta uma linha por corretor PRESENTE em cada treinamento filtrado, com dados de
-// contato/hierarquia — útil para conferência de presença e RH/comercial.
+// Exporta uma linha por corretor que demonstrou interesse em cada treinamento filtrado
+// (inclusive quem não teve presença confirmada), com dados de contato/hierarquia — útil
+// para conferência de presença e RH/comercial.
 async function exportarPresencas(req, res) {
   const { produtoId, supervisorId, dataInicio, dataFim } = req.query;
 
@@ -78,7 +79,9 @@ async function exportarPresencas(req, res) {
     },
     include: {
       produto: { select: { nome: true } },
-      presencas: { include: { corretor: { include: { empresa: true } } } },
+      interesses: { where: { cancelado: false }, include: { corretor: { include: { empresa: true } } } },
+      presencas: { select: { corretorId: true } },
+      tentativasProva: { where: { status: 'CONCLUIDA' }, select: { corretorId: true, aprovado: true } },
     },
     orderBy: { data: 'desc' },
   });
@@ -95,14 +98,28 @@ async function exportarPresencas(req, res) {
     { header: 'Local do Treinamento', key: 'local', width: 25 },
     { header: 'Produto', key: 'produto', width: 22 },
     { header: 'Tema', key: 'tema', width: 30 },
+    { header: 'Prova', key: 'prova', width: 10 },
     { header: 'Data', key: 'data', width: 15 },
+    { header: 'Presença', key: 'presenca', width: 12 },
+    { header: 'Aprovado', key: 'aprovado', width: 12 },
   ];
   sheet.getRow(1).font = { bold: true };
 
   for (const t of treinamentos) {
-    // Presentes = quem teve a presença confirmada manualmente pelo supervisor/admin
-    const presentes = t.presencas.map((p) => p.corretor);
-    for (const corretor of presentes) {
+    const presencaIds = new Set(t.presencas.map((p) => p.corretorId));
+    const tentativasMap = new Map(t.tentativasProva.map((tp) => [tp.corretorId, tp]));
+
+    // Todos os corretores que demonstraram interesse (não cancelado) aparecem na listagem,
+    // independentemente de terem tido a presença confirmada ou não.
+    for (const interesse of t.interesses) {
+      const corretor = interesse.corretor;
+      const tentativa = tentativasMap.get(corretor.id);
+
+      let aprovado = '';
+      if (t.temProva && tentativa) {
+        aprovado = tentativa.aprovado ? 'Sim' : 'Não';
+      }
+
       sheet.addRow({
         nome: corretor.nome,
         empresa: corretor.empresa?.nome || '-',
@@ -111,7 +128,10 @@ async function exportarPresencas(req, res) {
         local: t.localTreinamento || '-',
         produto: t.produto.nome,
         tema: t.tema,
+        prova: t.temProva ? 'Sim' : 'Não',
         data: new Date(t.data).toLocaleDateString('pt-BR'),
+        presenca: presencaIds.has(corretor.id) ? 'Sim' : 'Não',
+        aprovado,
       });
     }
   }

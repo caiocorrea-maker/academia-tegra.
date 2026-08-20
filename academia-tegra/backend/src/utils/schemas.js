@@ -66,12 +66,12 @@ const questaoSchema = z.object({
 const provaModeloSchema = z.object({
   titulo: z.string().min(3),
   produtoId: z.string().uuid(),
-  questoes: z.array(questaoSchema).length(10, 'A prova deve conter exatamente 10 questões.'),
+  questoes: z.array(questaoSchema).min(3, 'A prova deve conter no mínimo 3 questões.').max(10, 'A prova pode conter no máximo 10 questões.'),
 });
 
 const editarProvaModeloSchema = z.object({
   titulo: z.string().min(3),
-  questoes: z.array(questaoSchema).length(10, 'A prova deve conter exatamente 10 questões.').optional(),
+  questoes: z.array(questaoSchema).min(3, 'A prova deve conter no mínimo 3 questões.').max(10, 'A prova pode conter no máximo 10 questões.').optional(),
 });
 
 const treinamentoSchema = z.object({

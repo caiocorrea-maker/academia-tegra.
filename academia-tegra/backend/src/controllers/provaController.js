@@ -3,7 +3,11 @@ const { provaModeloSchema, editarProvaModeloSchema, responderProvaSchema } = req
 const { HttpError } = require('../middleware/errorHandler');
 const { gerarCertificadoParaTentativa } = require('../services/certificadoService');
 
-// Verifica se o usuário (admin ou supervisor) pode gerenciar (editar/excluir) uma prova:
+// Nota mínima de aprovação: ~70% de acerto, arredondado (ex.: 3 questões → mínimo 2 acertos;
+// 10 questões → mínimo 7 acertos).
+function minimoAcertosParaAprovacao(totalQuestoes) {
+  return Math.round(totalQuestoes * 0.7);
+}
 // admin pode qualquer uma; supervisor só as dos produtos vinculados a ele.
 async function podeGerenciarProva(usuario, prova) {
   if (usuario.perfil === 'ADMIN') return true;
@@ -186,6 +190,7 @@ async function iniciar(req, res) {
     treinamento: { id: treinamento.id, tema: treinamento.tema },
     prazoFinal: treinamento.liberadoExpiraEm,
     questoes: questoesSemGabarito,
+    minimoAcertos: minimoAcertosParaAprovacao(questoesSemGabarito.length),
   });
 }
 
@@ -219,7 +224,7 @@ async function responder(req, res) {
     }
   }
   const percentual = (acertos / totalQuestoes) * 100;
-  const aprovado = percentual >= 70;
+  const aprovado = acertos >= minimoAcertosParaAprovacao(totalQuestoes);
 
   await prisma.$transaction([
     prisma.resposta.deleteMany({ where: { tentativaId: tentativa.id } }),
