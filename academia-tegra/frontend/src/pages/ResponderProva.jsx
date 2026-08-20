@@ -61,6 +61,7 @@ export default function ResponderProva() {
         <>
           <p style={{ color: '#888', fontSize: 13 }}>
             Prazo final para envio: {new Date(dados.prazoFinal).toLocaleTimeString('pt-BR')}
+            {' · '}Mínimo para aprovação: {dados.minimoAcertos} de {dados.questoes.length} questões
           </p>
           {dados.questoes.map((q, i) => (
             <div key={q.id} className="card" style={{ marginBottom: 12 }}>

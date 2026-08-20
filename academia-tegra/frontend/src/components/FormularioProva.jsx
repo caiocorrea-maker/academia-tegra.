@@ -1,6 +1,9 @@
 import { useState } from 'react';
 import api from '../services/api';
 
+const MIN_QUESTOES = 3;
+const MAX_QUESTOES = 10;
+
 function questaoVazia() {
   return {
     enunciado: '',
@@ -13,9 +16,14 @@ function questaoVazia() {
   };
 }
 
+// Mesma regra usada no backend: ~70% de acerto, arredondado.
+function minimoAcertos(totalQuestoes) {
+  return Math.round(totalQuestoes * 0.7);
+}
+
 export default function FormularioProva({ produtoId, aoCriar, aoFechar }) {
   const [titulo, setTitulo] = useState('');
-  const [questoes, setQuestoes] = useState(Array.from({ length: 10 }, questaoVazia));
+  const [questoes, setQuestoes] = useState(Array.from({ length: MIN_QUESTOES }, questaoVazia));
   const [erro, setErro] = useState('');
   const [salvando, setSalvando] = useState(false);
 
@@ -33,6 +41,16 @@ export default function FormularioProva({ produtoId, aoCriar, aoFechar }) {
       ...q,
       alternativas: q.alternativas.map((a, j) => ({ ...a, correta: j === ai })),
     }));
+  }
+
+  function adicionarQuestao() {
+    if (questoes.length >= MAX_QUESTOES) return;
+    setQuestoes((qs) => [...qs, questaoVazia()]);
+  }
+
+  function removerQuestao(qi) {
+    if (questoes.length <= MIN_QUESTOES) return;
+    setQuestoes((qs) => qs.filter((_, idx) => idx !== qi));
   }
 
   async function salvar(e) {
@@ -53,6 +71,11 @@ export default function FormularioProva({ produtoId, aoCriar, aoFechar }) {
     <div className="modal-fundo" onClick={aoFechar}>
       <div className="modal-caixa" style={{ maxWidth: 680 }} onClick={(e) => e.stopPropagation()}>
         <h2>Nova prova (banco de provas)</h2>
+        <p style={{ fontSize: 13, color: '#666' }}>
+          Mínimo de {MIN_QUESTOES} e máximo de {MAX_QUESTOES} questões. Aprovação com ~70% de
+          acerto — com {questoes.length} questão(ões), são necessários pelo menos{' '}
+          <strong>{minimoAcertos(questoes.length)} acerto(s)</strong>.
+        </p>
         <form onSubmit={salvar}>
           <div className="campo">
             <label>Título da prova</label>
@@ -61,8 +84,20 @@ export default function FormularioProva({ produtoId, aoCriar, aoFechar }) {
 
           {questoes.map((q, qi) => (
             <div key={qi} className="card" style={{ marginBottom: 12 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <label style={{ fontWeight: 600 }}>Questão {qi + 1}</label>
+                {questoes.length > MIN_QUESTOES && (
+                  <button
+                    type="button"
+                    className="btn-link"
+                    style={{ color: 'var(--cor-erro)', fontSize: 12 }}
+                    onClick={() => removerQuestao(qi)}
+                  >
+                    Remover questão
+                  </button>
+                )}
+              </div>
               <div className="campo">
-                <label>Questão {qi + 1}</label>
                 <textarea rows={2} value={q.enunciado} onChange={(e) => atualizarEnunciado(qi, e.target.value)} required />
               </div>
               {q.alternativas.map((a, ai) => (
@@ -84,6 +119,16 @@ export default function FormularioProva({ produtoId, aoCriar, aoFechar }) {
               ))}
             </div>
           ))}
+
+          <button
+            type="button"
+            className="btn btn-secundario"
+            style={{ marginBottom: 12 }}
+            onClick={adicionarQuestao}
+            disabled={questoes.length >= MAX_QUESTOES}
+          >
+            + Adicionar questão {questoes.length >= MAX_QUESTOES && '(máximo atingido)'}
+          </button>
 
           {erro && <p className="erro">{erro}</p>}
           <div style={{ display: 'flex', gap: 8 }}>

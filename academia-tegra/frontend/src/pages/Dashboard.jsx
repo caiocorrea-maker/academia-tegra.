@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, Fragment } from 'react';
 import {
   ResponsiveContainer, PieChart, Pie, Cell, Tooltip, Legend,
   BarChart, Bar, XAxis, YAxis, CartesianGrid,
@@ -10,6 +10,53 @@ const PALETA = ['#4f46e5', '#0ea5e9', '#16a34a', '#f59e0b', '#dc2626', '#7c3aed'
 
 function corPor(indice) {
   return PALETA[indice % PALETA.length];
+}
+
+// Tooltip customizado para a pizza de aptos por empresa (item 2), com detalhamento por produto
+function TooltipPizza({ active, payload, total }) {
+  if (!active || !payload?.length) return null;
+  const dado = payload[0].payload;
+  const percentual = total ? ((dado.aptos / total) * 100).toFixed(1) : 0;
+  return (
+    <div style={{ background: '#fff', border: '1px solid #ddd', borderRadius: 8, padding: 10, fontSize: 12, maxWidth: 240 }}>
+      <strong>{dado.nome}</strong>
+      <div>{dado.aptos} corretores aptos ({percentual}%)</div>
+      {(dado.porProduto || []).length > 0 && (
+        <>
+          <div style={{ marginTop: 6, fontWeight: 600 }}>Por produto</div>
+          {dado.porProduto.map((d) => (
+            <div key={d.nome} style={{ display: 'flex', justifyContent: 'space-between', gap: 8 }}>
+              <span>{d.nome}</span>
+              <span>{d.aptos}</span>
+            </div>
+          ))}
+        </>
+      )}
+    </div>
+  );
+}
+
+// Painel fixo com o detalhamento por produto da fatia selecionada, útil para toque em celular
+function PainelDetalhePizza({ item, total }) {
+  if (!item) return null;
+  const percentual = total ? ((item.aptos / total) * 100).toFixed(1) : 0;
+  return (
+    <div style={{ marginTop: 10, background: '#f8f9fc', borderRadius: 8, padding: 12, fontSize: 13 }}>
+      <strong>{item.nome}</strong>
+      <div>{item.aptos} corretores aptos ({percentual}%)</div>
+      {(item.porProduto || []).length > 0 && (
+        <div style={{ marginTop: 8 }}>
+          <div style={{ fontWeight: 600, marginBottom: 4 }}>Por produto</div>
+          {item.porProduto.map((d) => (
+            <div key={d.nome} style={{ display: 'flex', justifyContent: 'space-between' }}>
+              <span>{d.nome}</span>
+              <span>{d.aptos}</span>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
 }
 
 // Tooltip customizado para os gráficos de coluna com detalhamento (itens 3 e 5)
@@ -63,14 +110,16 @@ function PainelDetalhe({ item, rotuloDetalhe }) {
 export default function Dashboard() {
   const [empresas, setEmpresas] = useState([]);
 
-  // 1) Tabela por produto
+  // 1) Tabela por produto (Consolidado)
   const [filtroTabela, setFiltroTabela] = useState({ empresaId: '', dataInicio: '', dataFim: '' });
   const [tabela, setTabela] = useState([]);
   const [carregandoTabela, setCarregandoTabela] = useState(true);
+  const [produtoExpandido, setProdutoExpandido] = useState(null);
 
   // 2) Pizza — aptos por empresa
   const [pizza, setPizza] = useState([]);
   const [carregandoPizza, setCarregandoPizza] = useState(true);
+  const [selecionadoPizza, setSelecionadoPizza] = useState(null);
 
   // 3) Coluna por empresa
   const [filtroColunaEmpresa, setFiltroColunaEmpresa] = useState({ dataInicio: '', dataFim: '' });
@@ -104,6 +153,7 @@ export default function Dashboard() {
     }
     api.get('/dashboard/tabela-produtos', { params }).then((res) => {
       setTabela(res.data);
+      setProdutoExpandido(null);
       setCarregandoTabela(false);
     });
   }, [filtroTabela]);
@@ -113,6 +163,7 @@ export default function Dashboard() {
     setCarregandoPizza(true);
     api.get('/dashboard/pizza-aptos-empresa').then((res) => {
       setPizza(res.data);
+      setSelecionadoPizza(null);
       setCarregandoPizza(false);
     });
   }, []);
@@ -177,11 +228,14 @@ export default function Dashboard() {
 
   return (
     <Layout>
-      <h2>Dashboard Comercial</h2>
+      <h2>Dashboard</h2>
 
-      {/* ==================== 1) Tabela por produto ==================== */}
+      {/* ==================== 1) Consolidado por produto ==================== */}
       <div className="card" style={{ marginBottom: 24 }}>
-        <h3 style={{ marginTop: 0 }}>Visão geral por produto</h3>
+        <h3 style={{ marginTop: 0 }}>Consolidado</h3>
+        <p style={{ fontSize: 12, color: '#888', marginTop: -8 }}>
+          Toque em um produto para ver o detalhamento por empresa de venda.
+        </p>
         <div className="filtros">
           <select
             value={filtroTabela.empresaId}
@@ -207,17 +261,41 @@ export default function Dashboard() {
                 </tr>
               </thead>
               <tbody>
-                {tabela.map((linha) => (
-                  <tr key={linha.produtoId} style={{ borderBottom: '1px solid #f0f0f0' }}>
-                    <td style={{ padding: '8px 6px' }}>
-                      <span style={{ display: 'inline-block', width: 10, height: 10, borderRadius: 3, background: linha.cor, marginRight: 6 }} />
-                      {linha.nome}
-                    </td>
-                    <td style={{ padding: '8px 6px' }}>{linha.treinamentosRealizados}</td>
-                    <td style={{ padding: '8px 6px' }}>{linha.presentes}</td>
-                    <td style={{ padding: '8px 6px' }}>{linha.aptos}</td>
-                  </tr>
-                ))}
+                {tabela.map((linha) => {
+                  const expandido = produtoExpandido === linha.produtoId;
+                  return (
+                    <Fragment key={linha.produtoId}>
+                      <tr
+                        onClick={() => setProdutoExpandido(expandido ? null : linha.produtoId)}
+                        style={{ borderBottom: '1px solid #f0f0f0', cursor: 'pointer' }}
+                      >
+                        <td style={{ padding: '8px 6px' }}>
+                          <span style={{ display: 'inline-block', width: 10, transform: `rotate(${expandido ? 90 : 0}deg)`, transition: 'transform 0.15s' }}>▸</span>
+                          <span style={{ display: 'inline-block', width: 10, height: 10, borderRadius: 3, background: linha.cor, margin: '0 6px' }} />
+                          {linha.nome}
+                        </td>
+                        <td style={{ padding: '8px 6px' }}>{linha.treinamentosRealizados}</td>
+                        <td style={{ padding: '8px 6px' }}>{linha.presentes}</td>
+                        <td style={{ padding: '8px 6px' }}>{linha.aptos}</td>
+                      </tr>
+                      {expandido && linha.porEmpresa.length === 0 && (
+                        <tr key={`${linha.produtoId}-vazio`} style={{ background: '#f8f9fc' }}>
+                          <td colSpan={4} style={{ padding: '6px 6px 6px 34px', fontSize: 13, color: '#888' }}>
+                            Nenhum dado por empresa neste período.
+                          </td>
+                        </tr>
+                      )}
+                      {expandido && linha.porEmpresa.map((e) => (
+                        <tr key={`${linha.produtoId}-${e.nome}`} style={{ background: '#f8f9fc', fontSize: 13 }}>
+                          <td style={{ padding: '6px 6px 6px 34px' }}>↳ {e.nome}</td>
+                          <td style={{ padding: '6px' }}>-</td>
+                          <td style={{ padding: '6px' }}>{e.presentes}</td>
+                          <td style={{ padding: '6px' }}>{e.aptos}</td>
+                        </tr>
+                      ))}
+                    </Fragment>
+                  );
+                })}
                 {tabela.length === 0 && (
                   <tr><td colSpan={4} style={{ padding: 12, color: '#888' }}>Nenhum produto ativo.</td></tr>
                 )}
@@ -229,25 +307,33 @@ export default function Dashboard() {
 
       {/* ==================== 2) Pizza — aptos por empresa ==================== */}
       <div className="card" style={{ marginBottom: 24 }}>
-        <h3 style={{ marginTop: 0 }}>Corretores aptos a tirar plantão, por empresa</h3>
+        <h3 style={{ marginTop: 0 }}>Aptos a tirar plantão</h3>
+        <p style={{ fontSize: 12, color: '#888', marginTop: -8 }}>
+          Passe o mouse ou toque em uma fatia para ver o detalhamento por produto.
+        </p>
         {carregandoPizza ? <p>Carregando...</p> : pizza.length === 0 ? <p style={{ color: '#888' }}>Sem dados.</p> : (
-          <ResponsiveContainer width="100%" height={320}>
-            <PieChart>
-              <Pie
-                data={pizza}
-                dataKey="aptos"
-                nameKey="nome"
-                cx="50%"
-                cy="50%"
-                outerRadius={110}
-                label={({ nome, aptos }) => `${nome}: ${aptos} (${totalAptosPizza ? ((aptos / totalAptosPizza) * 100).toFixed(0) : 0}%)`}
-              >
-                {pizza.map((_, i) => <Cell key={i} fill={corPor(i)} />)}
-              </Pie>
-              <Tooltip formatter={(valor, _nome, item) => [`${valor} corretores (${totalAptosPizza ? ((valor / totalAptosPizza) * 100).toFixed(1) : 0}%)`, item.payload.nome]} />
-              <Legend />
-            </PieChart>
-          </ResponsiveContainer>
+          <>
+            <ResponsiveContainer width="100%" height={320}>
+              <PieChart>
+                <Pie
+                  data={pizza}
+                  dataKey="aptos"
+                  nameKey="nome"
+                  cx="50%"
+                  cy="50%"
+                  outerRadius={110}
+                  label={({ nome, aptos }) => `${nome}: ${aptos} (${totalAptosPizza ? ((aptos / totalAptosPizza) * 100).toFixed(0) : 0}%)`}
+                  onClick={(dado) => setSelecionadoPizza(dado?.payload ?? dado)}
+                  cursor="pointer"
+                >
+                  {pizza.map((_, i) => <Cell key={i} fill={corPor(i)} />)}
+                </Pie>
+                <Tooltip content={<TooltipPizza total={totalAptosPizza} />} />
+                <Legend />
+              </PieChart>
+            </ResponsiveContainer>
+            <PainelDetalhePizza item={selecionadoPizza} total={totalAptosPizza} />
+          </>
         )}
       </div>
 
@@ -297,7 +383,7 @@ export default function Dashboard() {
 
       {/* ==================== 4) Barra horizontal — treinamentos por produto ==================== */}
       <div className="card" style={{ marginBottom: 24 }}>
-        <h3 style={{ marginTop: 0 }}>Quantidade de treinamentos dados, por produto</h3>
+        <h3 style={{ marginTop: 0 }}>Treinamentos realizados</h3>
         <div className="filtros">
           <input type="date" value={filtroTreinamentosProduto.dataInicio} onChange={(e) => setFiltroTreinamentosProduto((f) => ({ ...f, dataInicio: e.target.value }))} />
           <span style={{ alignSelf: 'center' }}>até</span>
@@ -321,7 +407,7 @@ export default function Dashboard() {
 
       {/* ==================== 5) Coluna vertical por produto ==================== */}
       <div className="card" style={{ marginBottom: 24 }}>
-        <h3 style={{ marginTop: 0 }}>Corretores treinados por produto</h3>
+        <h3 style={{ marginTop: 0 }}>Corretores treinados</h3>
         <p style={{ fontSize: 12, color: '#888', marginTop: -8 }}>
           Passe o mouse ou toque em uma coluna para ver a média de presença por treinamento e o detalhamento por empresa.
         </p>

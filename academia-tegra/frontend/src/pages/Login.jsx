@@ -45,7 +45,7 @@ export default function Login() {
         </form>
         <div style={{ marginTop: 16, display: 'flex', justifyContent: 'space-between', fontSize: 13 }}>
           <Link to="/esqueci-senha">Esqueci minha senha</Link>
-          <Link to="/cadastro-corretor">Sou corretor, quero me cadastrar</Link>
+          <Link to="/cadastro-corretor">Primeiro acesso</Link>
         </div>
       </div>
     </div>

@@ -87,7 +87,7 @@ export default function GerenciarProvasModal({ produtos, aoFechar }) {
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                   <div>
                     <strong>{prova.titulo}</strong>
-                    <p style={{ fontSize: 12, color: '#888', margin: '4px 0 0' }}>{prova._count?.questoes ?? 10} questões</p>
+                    <p style={{ fontSize: 12, color: '#888', margin: '4px 0 0' }}>{prova._count?.questoes ?? '?'} questões</p>
                   </div>
                   <div style={{ display: 'flex', gap: 8 }}>
                     <button className="btn-link" onClick={() => abrirEdicao(prova)}>Editar título</button>
