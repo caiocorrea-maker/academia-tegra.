@@ -129,12 +129,21 @@ async function excluirModelo(req, res) {
     throw new HttpError(403, 'Você não tem permissão para excluir esta prova.');
   }
 
-  const jaUsada = (await prisma.treinamento.count({ where: { provaId: id } })) > 0;
-  if (jaUsada) {
-    throw new HttpError(409, 'Esta prova já foi usada em algum treinamento e não pode ser excluída, para preservar o histórico.');
-  }
+  // MODO TESTES: a trava original impedia excluir provas já usadas em algum treinamento
+  // (throw 409 abaixo, comentado). Para reativar, descomente o bloco e remova o
+  // updateMany que desvincula os treinamentos.
+  // const jaUsada = (await prisma.treinamento.count({ where: { provaId: id } })) > 0;
+  // if (jaUsada) {
+  //   throw new HttpError(409, 'Esta prova já foi usada em algum treinamento e não pode ser excluída, para preservar o histórico.');
+  // }
 
-  await prisma.provaModelo.delete({ where: { id } });
+  // Desvincula a prova de qualquer treinamento que a use (o treinamento em si não é
+  // apagado, só perde a referência à prova) para permitir a exclusão sem erro de
+  // integridade referencial.
+  await prisma.$transaction([
+    prisma.treinamento.updateMany({ where: { provaId: id }, data: { provaId: null, temProva: false } }),
+    prisma.provaModelo.delete({ where: { id } }),
+  ]);
   res.json({ mensagem: 'Prova excluída com sucesso.' });
 }
 

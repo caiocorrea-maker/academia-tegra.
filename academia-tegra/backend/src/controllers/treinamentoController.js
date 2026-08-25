@@ -299,7 +299,14 @@ async function excluir(req, res) {
     throw new HttpError(403, 'Você só pode excluir treinamentos criados por você.');
   }
 
-  await prisma.treinamento.delete({ where: { id } });
+  // MODO TESTES: certificados não têm exclusão em cascata no schema (para preservar o
+  // histórico em uso normal), então são apagados manualmente aqui antes do treinamento.
+  // Para reativar a trava, basta remover este bloco e impedir a exclusão quando houver
+  // certificados vinculados (similar ao que é feito em provaController.excluirModelo).
+  await prisma.$transaction([
+    prisma.certificado.deleteMany({ where: { treinamentoId: id } }),
+    prisma.treinamento.delete({ where: { id } }),
+  ]);
   res.json({ mensagem: 'Treinamento excluído com sucesso.' });
 }
 

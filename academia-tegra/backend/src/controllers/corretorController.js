@@ -230,12 +230,19 @@ async function excluir(req, res) {
   const corretor = await prisma.usuario.findUnique({ where: { id, perfil: 'CORRETOR' } });
   if (!corretor) throw new HttpError(404, 'Corretor não encontrado.');
 
+  // MODO TESTES: certificados não têm exclusão em cascata no schema, então são apagados
+  // manualmente aqui antes do usuário (interesses, presenças e tentativas de prova já
+  // cascateiam sozinhos). Para reativar a trava original, remova o deleteMany abaixo e
+  // deixe o catch de P2003/P2014 barrar a exclusão como antes.
   try {
-    await prisma.usuario.delete({ where: { id } });
+    await prisma.$transaction([
+      prisma.certificado.deleteMany({ where: { corretorId: id } }),
+      prisma.usuario.delete({ where: { id } }),
+    ]);
     res.json({ mensagem: 'Corretor excluído com sucesso.' });
   } catch (err) {
     if (err.code === 'P2003' || err.code === 'P2014') {
-      throw new HttpError(409, 'Este corretor possui histórico vinculado (certificados, presenças ou provas) e não pode ser excluído. Você pode inativá-lo em vez disso.');
+      throw new HttpError(409, 'Este corretor possui histórico vinculado e não pode ser excluído. Você pode inativá-lo em vez disso.');
     }
     throw err;
   }
