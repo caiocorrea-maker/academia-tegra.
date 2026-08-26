@@ -41,10 +41,21 @@ export default function Biblioteca() {
 
   async function baixar(material) {
     setBaixando(material.id);
+    // Correção iOS: o Safari do iPhone só permite abrir uma nova aba (window.open) dentro
+    // do mesmo clique síncrono do usuário — se abrirmos depois do "await" da chamada à
+    // API, ele bloqueia silenciosamente. Por isso a aba é aberta em branco aqui, ANTES do
+    // await, e só recebe a URL real do arquivo quando a resposta chega.
+    const novaAba = window.open('', '_blank');
     try {
       const res = await api.get(`/biblioteca/${material.id}/url`);
-      window.open(res.data.url, '_blank');
+      if (novaAba) {
+        novaAba.location.href = res.data.url;
+      } else {
+        // Caso o navegador ainda assim tenha bloqueado o popup, navega na aba atual.
+        window.location.href = res.data.url;
+      }
     } catch (err) {
+      if (novaAba) novaAba.close();
       alert(err.response?.data?.erro || 'Não foi possível abrir este material.');
     } finally {
       setBaixando('');

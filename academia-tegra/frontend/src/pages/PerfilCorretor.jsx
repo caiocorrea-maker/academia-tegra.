@@ -146,7 +146,6 @@ export default function PerfilCorretor() {
                 <p style={{ fontSize: 12, color: c.valido ? '#16a34a' : '#dc2626' }}>
                   {c.valido ? `Válido até ${new Date(c.validoAte).toLocaleDateString('pt-BR')}` : 'Expirado'}
                 </p>
-                <a href={c.url} target="_blank" rel="noreferrer" className="btn-link">Ver certificado</a>
               </div>
             ))}
           </div>
