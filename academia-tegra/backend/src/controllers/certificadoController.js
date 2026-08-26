@@ -1,8 +1,9 @@
 const prisma = require('../config/prisma');
-const { getFileUrl } = require('../config/s3');
 const { HttpError } = require('../middleware/errorHandler');
 
-// Lista certificados do próprio corretor (ou de um corretor específico, se Admin/Supervisor)
+// MODO SEM PDF: certificados não geram mais arquivo (ver certificadoService.js), então
+// esta lista não retorna mais "url" de download — só os dados usados para exibição
+// (a carteirinha do corretor com as insígnias é quem representa o certificado agora).
 async function listarMeusCertificados(req, res) {
   const certificados = await prisma.certificado.findMany({
     where: { corretorId: req.usuario.id },
@@ -10,31 +11,15 @@ async function listarMeusCertificados(req, res) {
     include: { treinamento: { include: { produto: true } } },
   });
 
-  const comUrl = await Promise.all(
-    certificados.map(async (c) => ({
-      id: c.id,
-      produto: c.treinamento.produto.nome,
-      tema: c.treinamento.tema,
-      percentual: c.percentual,
-      emitidoEm: c.emitidoEm,
-      url: await getFileUrl(c.urlArquivo),
-    }))
-  );
+  const resultado = certificados.map((c) => ({
+    id: c.id,
+    produto: c.treinamento.produto.nome,
+    tema: c.treinamento.tema,
+    percentual: c.percentual,
+    emitidoEm: c.emitidoEm,
+  }));
 
-  res.json(comUrl);
+  res.json(resultado);
 }
 
-async function obterUrlDownload(req, res) {
-  const { id } = req.params;
-  const certificado = await prisma.certificado.findUnique({ where: { id } });
-  if (!certificado) throw new HttpError(404, 'Certificado não encontrado.');
-
-  if (req.usuario.perfil === 'CORRETOR' && certificado.corretorId !== req.usuario.id) {
-    throw new HttpError(403, 'Você não tem acesso a este certificado.');
-  }
-
-  const url = await getFileUrl(certificado.urlArquivo);
-  res.json({ url });
-}
-
-module.exports = { listarMeusCertificados, obterUrlDownload };
+module.exports = { listarMeusCertificados };

@@ -108,7 +108,8 @@ async function detalhar(req, res) {
       valido: agora < calcularValidoAte(c.emitidoEm),
       tema: c.treinamento.tema,
       produto: c.treinamento.produto,
-      url: await getFileUrl(c.urlArquivo),
+      // MODO SEM PDF: certificados não geram mais arquivo, a carteirinha com insígnias
+      // é quem representa o certificado agora — por isso não há mais "url" aqui.
     }))
   );
 
