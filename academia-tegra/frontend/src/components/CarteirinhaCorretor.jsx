@@ -3,10 +3,15 @@ import InsigniaSelo from './InsigniaSelo';
 import { formatarCPF } from '../utils/formatadores';
 import api from '../services/api';
 
+function formatarData(d) {
+  return new Date(d).toLocaleDateString('pt-BR');
+}
+
 export default function CarteirinhaCorretor({ dados, podeEditarFoto, aoAtualizarFoto }) {
   const inputRef = useRef(null);
   const [enviando, setEnviando] = useState(false);
   const [erro, setErro] = useState('');
+  const [insigniaSelecionada, setInsigniaSelecionada] = useState(null); // { produtoNome, insignia }
 
   async function selecionarFoto(e) {
     const arquivo = e.target.files?.[0];
@@ -32,7 +37,7 @@ export default function CarteirinhaCorretor({ dados, podeEditarFoto, aoAtualizar
     <div className="carteirinha">
       <div className="carteirinha-topo">
         <span className="carteirinha-titulo">ACADEMIA TEGRA</span>
-        <span className="carteirinha-subtitulo">Carteirinha de Certificações</span>
+        <span className="carteirinha-subtitulo">Carteira do Corretor</span>
       </div>
 
       <div className="carteirinha-corpo">
@@ -86,14 +91,18 @@ export default function CarteirinhaCorretor({ dados, podeEditarFoto, aoAtualizar
               {item.apto ? '✔' : '✕'} {item.produto.nome}
             </span>
             <div className="carteirinha-insignias">
-              {Array.from({ length: item.certificadosNecessarios }).map((_, i) => (
+              {item.insignias.map((insignia) => (
                 <InsigniaSelo
-                  key={i}
-                  preenchida={i < item.qtdCertificadosValidos}
+                  key={insignia.temaOficialId}
+                  preenchida={insignia.preenchida}
                   cor={item.produto.corCalendario}
-                  titulo={`${item.produto.nome}: ${item.qtdCertificadosValidos}/${item.certificadosNecessarios} certificados válidos`}
+                  titulo={`${insignia.nome}${insignia.preenchida ? ` — válido até ${formatarData(insignia.validoAte)}` : ' — ainda não concluído'}`}
+                  onClick={() => setInsigniaSelecionada({ produtoNome: item.produto.nome, insignia })}
                 />
               ))}
+              {item.insignias.length === 0 && (
+                <span style={{ fontSize: 12, color: '#888' }}>Nenhum treinamento oficial cadastrado ainda.</span>
+              )}
             </div>
           </div>
         ))}
@@ -101,6 +110,21 @@ export default function CarteirinhaCorretor({ dados, podeEditarFoto, aoAtualizar
           <span style={{ fontSize: 13, color: '#888' }}>Nenhum produto ativo cadastrado.</span>
         )}
       </div>
+
+      {insigniaSelecionada && (
+        <div className="modal-fundo" onClick={() => setInsigniaSelecionada(null)}>
+          <div className="modal-caixa" style={{ maxWidth: 340 }} onClick={(e) => e.stopPropagation()}>
+            <h3 style={{ marginTop: 0 }}>{insigniaSelecionada.insignia.nome}</h3>
+            <p style={{ fontSize: 13, color: '#888', margin: '0 0 10px' }}>{insigniaSelecionada.produtoNome}</p>
+            {insigniaSelecionada.insignia.preenchida ? (
+              <p style={{ color: '#16a34a' }}>Válido até {formatarData(insigniaSelecionada.insignia.validoAte)}</p>
+            ) : (
+              <p style={{ color: '#888' }}>Este treinamento ainda não foi concluído (ou o certificado expirou).</p>
+            )}
+            <button className="btn btn-secundario" type="button" onClick={() => setInsigniaSelecionada(null)}>Fechar</button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

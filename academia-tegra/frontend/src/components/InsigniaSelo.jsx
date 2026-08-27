@@ -3,7 +3,7 @@
 // Quando "preenchida" (patch na cor do produto, flor num tom mais claro), representa um
 // certificado válido; quando "vazia" (tudo em cinza), representa uma vaga de certificado
 // ainda não alcançada.
-export default function InsigniaSelo({ preenchida, cor = '#4f46e5', tamanho = 26, titulo }) {
+export default function InsigniaSelo({ preenchida, cor = '#4f46e5', tamanho = 26, titulo, onClick }) {
   const corPatch = preenchida ? cor : '#c7cad1';
   const corBorda = preenchida ? shadeColor(cor, -25) : '#a5a8b0';
   const corFlor = preenchida ? '#fff4d1' : '#e4e6ea';
@@ -17,7 +17,9 @@ export default function InsigniaSelo({ preenchida, cor = '#4f46e5', tamanho = 26
       viewBox="0 0 24 24"
       fill="none"
       xmlns="http://www.w3.org/2000/svg"
-      style={{ flexShrink: 0 }}
+      style={{ flexShrink: 0, cursor: onClick ? 'pointer' : 'default' }}
+      onClick={onClick}
+      role={onClick ? 'button' : undefined}
     >
       {titulo && <title>{titulo}</title>}
 

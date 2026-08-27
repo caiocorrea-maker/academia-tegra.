@@ -120,37 +120,9 @@ export default function PerfilCorretor() {
         {mensagem && <p className="sucesso">{mensagem}</p>}
       </div>
 
-      <h3>Certificados por Produto</h3>
-      {dados.certificadosPorProduto.length === 0 && <p style={{ color: '#888' }}>Nenhum certificado emitido ainda.</p>}
-
-      {dados.certificadosPorProduto.map((grupo) => (
-        <div key={grupo.produto.id} className="card" style={{ marginBottom: 16 }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10 }}>
-            <span className="badge" style={{ background: grupo.produto.corCalendario, color: '#fff' }}>{grupo.produto.nome}</span>
-            {grupo.apto ? (
-              <span title="Apto a tirar plantão" style={{ color: '#16a34a', fontWeight: 700, fontSize: 18 }}>✔</span>
-            ) : (
-              <span title="Não apto a tirar plantão" style={{ color: '#dc2626', fontWeight: 700, fontSize: 18 }}>✕</span>
-            )}
-            <span style={{ fontSize: 13, color: '#666' }}>
-              {grupo.qtdCertificadosValidos} de {grupo.certificadosNecessarios} certificados válidos necessários
-            </span>
-          </div>
-
-          <div className="grade-cards">
-            {grupo.certificados.map((c) => (
-              <div key={c.id} className="card" style={{ borderColor: c.valido ? '#16a34a' : '#e2e2ea' }}>
-                <p style={{ fontSize: 13, margin: '4px 0' }}>{c.tema}</p>
-                <p style={{ fontSize: 13, margin: '4px 0' }}>Aproveitamento: {c.percentual.toFixed(0)}%</p>
-                <p style={{ fontSize: 12, color: '#888' }}>Emitido em {new Date(c.emitidoEm).toLocaleDateString('pt-BR')}</p>
-                <p style={{ fontSize: 12, color: c.valido ? '#16a34a' : '#dc2626' }}>
-                  {c.valido ? `Válido até ${new Date(c.validoAte).toLocaleDateString('pt-BR')}` : 'Expirado'}
-                </p>
-              </div>
-            ))}
-          </div>
-        </div>
-      ))}
+      <p style={{ fontSize: 13, color: '#888', marginTop: 8 }}>
+        Toque em uma insígnia na carteira acima para ver o treinamento correspondente e, se já concluído, até quando ele é válido.
+      </p>
     </Layout>
   );
 }

@@ -2,8 +2,6 @@ import { useEffect, useState } from 'react';
 import Layout from '../components/Layout';
 import api from '../services/api';
 
-const CORES_SUGERIDAS = ['#4f46e5', '#dc2626', '#16a34a', '#ea580c', '#0891b2', '#c026d3', '#ca8a04', '#0284c7'];
-
 export default function PainelAdmin() {
   const [aba, setAba] = useState('usuarios');
 
@@ -11,7 +9,7 @@ export default function PainelAdmin() {
     <Layout>
       <h2>Painel do Administrador</h2>
       <div style={{ display: 'flex', gap: 8, marginBottom: 20 }}>
-        {[['usuarios', 'Administradores e Supervisores'], ['produtos', 'Produtos'], ['empresas', 'Empresas de Vendas']].map(([k, label]) => (
+        {[['usuarios', 'Administradores e Supervisores'], ['empresas', 'Empresas de Vendas']].map(([k, label]) => (
           <button
             key={k}
             className={`btn ${aba === k ? '' : 'btn-secundario'}`}
@@ -23,7 +21,6 @@ export default function PainelAdmin() {
       </div>
 
       {aba === 'usuarios' && <AbaUsuarios />}
-      {aba === 'produtos' && <AbaProdutos />}
       {aba === 'empresas' && <AbaEmpresas />}
     </Layout>
   );
@@ -195,111 +192,6 @@ function AbaUsuarios() {
                   </div>
                 </div>
               )}
-              {erro && <p className="erro">{erro}</p>}
-              <div style={{ display: 'flex', gap: 8 }}>
-                <button className="btn" type="submit">Salvar</button>
-                <button className="btn btn-secundario" type="button" onClick={() => setMostrarForm(false)}>Cancelar</button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
-    </div>
-  );
-}
-
-// ---------------- Produtos ----------------
-
-function AbaProdutos() {
-  const [produtos, setProdutos] = useState([]);
-  const [mostrarForm, setMostrarForm] = useState(false);
-  const [editando, setEditando] = useState(null);
-  const [form, setForm] = useState({ nome: '', corCalendario: CORES_SUGERIDAS[0], certificadosNecessarios: 3 });
-  const [erro, setErro] = useState('');
-
-  async function carregar() {
-    const res = await api.get('/produtos');
-    setProdutos(res.data);
-  }
-  useEffect(() => { carregar(); }, []);
-
-  function abrirNovo() { setEditando(null); setForm({ nome: '', corCalendario: CORES_SUGERIDAS[0], certificadosNecessarios: 3 }); setMostrarForm(true); }
-  function abrirEdicao(p) { setEditando(p); setForm({ nome: p.nome, corCalendario: p.corCalendario, certificadosNecessarios: p.certificadosNecessarios || 3 }); setMostrarForm(true); }
-
-  async function salvar(e) {
-    e.preventDefault();
-    setErro('');
-    try {
-      const payload = { ...form, certificadosNecessarios: Number(form.certificadosNecessarios) };
-      if (editando) await api.put(`/produtos/${editando.id}`, payload);
-      else await api.post('/produtos', payload);
-      setMostrarForm(false);
-      carregar();
-    } catch (err) {
-      setErro(err.response?.data?.erro || 'Não foi possível salvar.');
-    }
-  }
-
-  async function inativar(p) {
-    if (!confirm(`Inativar o produto "${p.nome}"?`)) return;
-    await api.delete(`/produtos/${p.id}`);
-    carregar();
-  }
-
-  return (
-    <div className="card">
-      <div className="topo-pagina">
-        <h3 style={{ margin: 0 }}>Produtos</h3>
-        <button className="btn" onClick={abrirNovo}>+ Novo produto</button>
-      </div>
-      <table>
-        <thead><tr><th>Nome</th><th>Cor</th><th>Certificados p/ aptidão</th><th></th></tr></thead>
-        <tbody>
-          {produtos.map((p) => (
-            <tr key={p.id}>
-              <td>{p.nome}</td>
-              <td><span style={{ display: 'inline-block', width: 18, height: 18, borderRadius: 4, background: p.corCalendario }} /></td>
-              <td>{p.certificadosNecessarios || 3}</td>
-              <td style={{ display: 'flex', gap: 8 }}>
-                <button className="btn-link" onClick={() => abrirEdicao(p)}>Editar</button>
-                <button className="btn-link" style={{ color: '#dc2626' }} onClick={() => inativar(p)}>Inativar</button>
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-
-      {mostrarForm && (
-        <div className="modal-fundo" onClick={() => setMostrarForm(false)}>
-          <div className="modal-caixa" style={{ maxWidth: 380 }} onClick={(e) => e.stopPropagation()}>
-            <h3>{editando ? 'Editar produto' : 'Novo produto'}</h3>
-            <form onSubmit={salvar}>
-              <div className="campo">
-                <label>Nome do produto</label>
-                <input value={form.nome} onChange={(e) => setForm((f) => ({ ...f, nome: e.target.value }))} required />
-              </div>
-              <div className="campo">
-                <label>Cor no calendário</label>
-                <input type="color" value={form.corCalendario} onChange={(e) => setForm((f) => ({ ...f, corCalendario: e.target.value }))} style={{ height: 42 }} />
-                <div style={{ display: 'flex', gap: 6, marginTop: 6 }}>
-                  {CORES_SUGERIDAS.map((c) => (
-                    <button
-                      type="button"
-                      key={c}
-                      onClick={() => setForm((f) => ({ ...f, corCalendario: c }))}
-                      style={{ width: 22, height: 22, borderRadius: 4, background: c, border: form.corCalendario === c ? '2px solid #1a1a2e' : 'none' }}
-                    />
-                  ))}
-                </div>
-              </div>
-              <div className="campo">
-                <label>Certificados válidos necessários para o corretor ficar "apto a plantão" neste produto</label>
-                <input
-                  type="number" min={1} value={form.certificadosNecessarios}
-                  onChange={(e) => setForm((f) => ({ ...f, certificadosNecessarios: e.target.value }))}
-                  required
-                />
-              </div>
               {erro && <p className="erro">{erro}</p>}
               <div style={{ display: 'flex', gap: 8 }}>
                 <button className="btn" type="submit">Salvar</button>

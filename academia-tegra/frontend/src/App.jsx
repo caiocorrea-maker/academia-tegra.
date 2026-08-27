@@ -11,6 +11,7 @@ import Supervisores from './pages/Supervisores';
 import Corretores from './pages/Corretores';
 import PerfilCorretor from './pages/PerfilCorretor';
 import PainelAdmin from './pages/PainelAdmin';
+import Produto from './pages/Produto';
 import ResponderProva from './pages/ResponderProva';
 import Biblioteca from './pages/Biblioteca';
 import Dashboard from './pages/Dashboard';
@@ -40,6 +41,10 @@ export default function App() {
       <Route path="/corretores/:id" element={<RotaProtegida><PerfilCorretor /></RotaProtegida>} />
 
       <Route path="/biblioteca" element={<RotaProtegida><Biblioteca /></RotaProtegida>} />
+
+      <Route path="/produto" element={
+        <RotaProtegida perfis={['ADMIN', 'SUPERVISOR']}><Produto /></RotaProtegida>
+      } />
 
       <Route path="/dashboard" element={<RotaProtegida perfis={['ADMIN', 'SUPERVISOR']}><Dashboard /></RotaProtegida>} />
 
