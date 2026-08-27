@@ -73,12 +73,13 @@ model Produto {
   corCalendario String   // hex color, ex: #FF5733
   ativo         Boolean  @default(true)
   criadoEm      DateTime @default(now())
-  certificadosNecessarios Int @default(3) // qtd. mínima de certificados válidos p/ corretor ser considerado apto
+  certificadosNecessarios Int @default(3) // qtd. de insígnias/Temas Oficiais ativos necessários p/ aptidão
 
   supervisores   ProdutoSupervisor[]
   treinamentos   Treinamento[]
   provasModelo   ProvaModelo[]
   materiais      MaterialBiblioteca[]
+  temasOficiais  TemaOficial[]
 }
 
 // Tabela associativa: quais produtos cada supervisor gerencia
@@ -90,6 +91,35 @@ model ProdutoSupervisor {
   supervisor   Usuario  @relation(fields: [supervisorId], references: [id], onDelete: Cascade)
 
   @@unique([produtoId, supervisorId])
+}
+
+// "Treinamento Oficial": cada um representa uma insígnia/vaga de certificado do produto
+// (posicao 1, 2, 3...), cadastrado pelo Admin/Supervisor na aba "Produto". Nasce sempre
+// com prova. Um treinamento marcado como "obrigatório" na Agenda deve estar vinculado a um
+// TemaOficial ativo — isso é o que impede o bug de certificados duplicados: o certificado
+// passa a ser identificado pelo ID do TemaOficial (não mais pelo nome digitado), então
+// repetir a aplicação do mesmo tema apenas renova a validade em vez de gerar um novo.
+// Nunca é excluído de verdade, só inativado (ex: quando certificadosNecessarios diminui),
+// para preservar o histórico e permitir reativação futura na mesma posição/insígnia.
+model TemaOficial {
+  id                String       @id @default(uuid())
+  produtoId         String
+  produto           Produto      @relation(fields: [produtoId], references: [id])
+  posicao           Int          // posição da insígnia na carteirinha (1, 2, 3...)
+  ativo             Boolean      @default(true)
+
+  nome              String       // tema/nome oficial do treinamento
+  planoTreinamento  String       @db.Text
+  provaId           String
+  prova             ProvaModelo  @relation(fields: [provaId], references: [id])
+
+  criadoEm          DateTime     @default(now())
+  atualizadoEm      DateTime     @updatedAt
+
+  treinamentos      Treinamento[]
+  certificados      Certificado[]
+
+  @@unique([produtoId, posicao])
 }
 
 enum StatusTreinamento {
@@ -116,6 +146,15 @@ model Treinamento {
   temProva          Boolean   @default(true)
   provaId           String?
   prova             ProvaModelo? @relation(fields: [provaId], references: [id])
+
+  // Treinamento obrigatório: vinculado a um Tema Oficial do produto (uma das "insígnias").
+  // Quando true, tema/planoTreinamento/provaId são copiados do Tema Oficial e travados —
+  // só local/data/horário ficam livres para editar em cada aplicação. É a única origem
+  // possível de emissão/renovação de certificado (treinamento livre nunca gera certificado,
+  // mesmo com prova e aprovação).
+  obrigatorio       Boolean   @default(false)
+  temaOficialId     String?
+  temaOficial       TemaOficial? @relation(fields: [temaOficialId], references: [id])
 
   // Controle de liberação da prova (o corretor acessa direto pela tela do treinamento,
   // desde que tenha presença confirmada manualmente pelo supervisor/admin)
@@ -183,6 +222,7 @@ model ProvaModelo {
 
   questoes     Questao[]
   treinamentos Treinamento[]
+  temasOficiais TemaOficial[]
 }
 
 model Questao {
@@ -239,18 +279,29 @@ model Resposta {
   alternativaId    String
 }
 
+// Um certificado por (TemaOficial + corretor): renovado (não duplicado) a cada nova
+// aprovação no mesmo tema — é isso que resolve o bug de insígnias duplicadas quando o
+// mesmo treinamento obrigatório é aplicado mais de uma vez. treinamentoId sempre aponta
+// para a aplicação mais recente que gerou/renovou o certificado (histórico "vivo").
+//
+// temaOficialId é opcional só por segurança de migração: registros antigos (de antes desta
+// regra existir, identificados por treinamento em vez de tema oficial) ficam com o campo
+// vazio e são ignorados em todos os cálculos de aptidão/carteirinha — são histórico morto,
+// mantido apenas para não quebrar o deploy.
 model Certificado {
   id             String      @id @default(uuid())
+  temaOficialId  String?
+  temaOficial    TemaOficial? @relation(fields: [temaOficialId], references: [id])
   treinamentoId  String
   treinamento    Treinamento @relation(fields: [treinamentoId], references: [id])
   corretorId     String
   corretor       Usuario     @relation(fields: [corretorId], references: [id])
 
-  urlArquivo     String      // chave/URL do PDF no bucket
+  urlArquivo     String      // legado (não é mais gerado PDF); mantido vazio
   percentual     Float
   emitidoEm      DateTime    @default(now())
 
-  @@unique([treinamentoId, corretorId])
+  @@unique([temaOficialId, corretorId])
 }
 
 // Biblioteca de Treinamentos: materiais em PDF/PPT para consulta e download.

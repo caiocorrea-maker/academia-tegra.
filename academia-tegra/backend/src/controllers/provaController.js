@@ -1,7 +1,7 @@
 const prisma = require('../config/prisma');
 const { provaModeloSchema, editarProvaModeloSchema, responderProvaSchema } = require('../utils/schemas');
 const { HttpError } = require('../middleware/errorHandler');
-const { gerarCertificadoParaTentativa } = require('../services/certificadoService');
+const { gerarOuRenovarCertificado } = require('../services/certificadoService');
 
 // Nota mínima de aprovação: ~70% de acerto, arredondado (ex.: 3 questões → mínimo 2 acertos;
 // 10 questões → mínimo 7 acertos).
@@ -118,7 +118,9 @@ async function editarModelo(req, res) {
   res.json(atualizada);
 }
 
-// Exclui uma prova salva — só é permitido se ela nunca foi usada em nenhum treinamento.
+// Exclui uma prova salva — bloqueada se estiver vinculada a algum Tema Oficial (produtoId
+// obrigatório referenciar uma prova; excluir quebraria a insígnia). Se usada apenas em
+// treinamentos livres, desvincula-os antes de excluir (ver MODO TESTES abaixo).
 async function excluirModelo(req, res) {
   const { id } = req.params;
 
@@ -129,6 +131,11 @@ async function excluirModelo(req, res) {
     throw new HttpError(403, 'Você não tem permissão para excluir esta prova.');
   }
 
+  const usadaEmTemaOficial = (await prisma.temaOficial.count({ where: { provaId: id } })) > 0;
+  if (usadaEmTemaOficial) {
+    throw new HttpError(409, 'Esta prova está vinculada a um Treinamento Oficial (insígnia) de um produto e não pode ser excluída. Troque a prova do Treinamento Oficial primeiro, na aba Produto.');
+  }
+
   // MODO TESTES: a trava original impedia excluir provas já usadas em algum treinamento
   // (throw 409 abaixo, comentado). Para reativar, descomente o bloco e remova o
   // updateMany que desvincula os treinamentos.
@@ -137,7 +144,7 @@ async function excluirModelo(req, res) {
   //   throw new HttpError(409, 'Esta prova já foi usada em algum treinamento e não pode ser excluída, para preservar o histórico.');
   // }
 
-  // Desvincula a prova de qualquer treinamento que a use (o treinamento em si não é
+  // Desvincula a prova de qualquer treinamento LIVRE que a use (o treinamento em si não é
   // apagado, só perde a referência à prova) para permitir a exclusão sem erro de
   // integridade referencial.
   await prisma.$transaction([
@@ -247,8 +254,13 @@ async function responder(req, res) {
   ]);
 
   let certificado = null;
-  if (aprovado) {
-    certificado = await gerarCertificadoParaTentativa({
+  // Certificado só é emitido/renovado quando o treinamento é "obrigatório" (vinculado a um
+  // Tema Oficial cadastrado no produto). Treinamento livre nunca gera certificado, mesmo
+  // com prova e aprovação — só fica registrado no histórico de presença/prova para os
+  // relatórios e a extração em Excel.
+  if (aprovado && treinamento.obrigatorio && treinamento.temaOficialId) {
+    certificado = await gerarOuRenovarCertificado({
+      temaOficialId: treinamento.temaOficialId,
       treinamentoId,
       corretorId: req.usuario.id,
       percentual,

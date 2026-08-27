@@ -70,10 +70,11 @@ function calcularValidoAte(emitidoEm) {
   return validoAte;
 }
 
-// Perfil completo de um corretor: certificados agrupados por produto (do mais antigo para
-// o mais novo dentro de cada produto), cada um com sua validade de 6 meses calculada, e um
-// indicador de aptidão por produto (verde/vermelho) com base no mínimo de certificados
-// válidos configurado em cada produto (Produto.certificadosNecessarios).
+// Perfil completo de um corretor: a carteirinha é montada a partir dos Temas Oficiais
+// ATIVOS de cada produto (uma "insígnia" por posição/tema cadastrado), não mais por uma
+// contagem solta de certificados. Cada insígnia mostra o nome do tema que representa e,
+// se o corretor já tiver certificado válido daquele tema, até quando ele vale. "Apto" =
+// ter certificado válido em TODOS os Temas Oficiais ativos do produto.
 async function detalhar(req, res) {
   const { id } = req.params;
 
@@ -86,73 +87,58 @@ async function detalhar(req, res) {
     select: {
       id: true, nome: true, cpf: true, email: true, gerente: true, diretor: true, creci: true, fotoUrl: true,
       empresa: { select: { id: true, nome: true } },
-      certificados: {
-        select: {
-          id: true, percentual: true, emitidoEm: true, urlArquivo: true,
-          treinamento: { select: { tema: true, produto: { select: { id: true, nome: true, corCalendario: true, certificadosNecessarios: true } } } },
-        },
-      },
     },
   });
-
   if (!corretor) throw new HttpError(404, 'Corretor não encontrado.');
 
   const agora = new Date();
 
-  const certificadosProcessados = await Promise.all(
-    corretor.certificados.map(async (c) => ({
-      id: c.id,
-      percentual: c.percentual,
-      emitidoEm: c.emitidoEm,
-      validoAte: calcularValidoAte(c.emitidoEm),
-      valido: agora < calcularValidoAte(c.emitidoEm),
-      tema: c.treinamento.tema,
-      produto: c.treinamento.produto,
-      // MODO SEM PDF: certificados não geram mais arquivo, a carteirinha com insígnias
-      // é quem representa o certificado agora — por isso não há mais "url" aqui.
-    }))
-  );
+  // Certificados do corretor, indexados por temaOficialId (ignora os antigos sem vínculo
+  // de Tema Oficial — são histórico morto do modelo anterior).
+  const certificados = await prisma.certificado.findMany({
+    where: { corretorId: id, temaOficialId: { not: null } },
+    select: { temaOficialId: true, percentual: true, emitidoEm: true },
+  });
+  const certificadoPorTema = new Map(certificados.map((c) => [c.temaOficialId, c]));
 
-  // Agrupa por produto, ordenando os certificados do mais antigo para o mais novo dentro do grupo.
-  const grupos = {};
-  for (const cert of certificadosProcessados) {
-    const chave = cert.produto.id;
-    if (!grupos[chave]) {
-      grupos[chave] = {
-        produto: { id: cert.produto.id, nome: cert.produto.nome, corCalendario: cert.produto.corCalendario },
-        certificadosNecessarios: cert.produto.certificadosNecessarios,
-        certificados: [],
-      };
-    }
-    grupos[chave].certificados.push(cert);
-  }
-
-  const certificadosPorProduto = Object.values(grupos)
-    .map((grupo) => {
-      grupo.certificados.sort((a, b) => new Date(a.emitidoEm) - new Date(b.emitidoEm));
-      const validosCount = grupo.certificados.filter((c) => c.valido).length;
-      return {
-        ...grupo,
-        qtdCertificadosValidos: validosCount,
-        apto: validosCount >= grupo.certificadosNecessarios,
-      };
-    })
-    .sort((a, b) => a.produto.nome.localeCompare(b.produto.nome));
-
-  // Carteirinha (item 2): precisa de TODOS os produtos ativos, mesmo os que o corretor
-  // ainda não tem nenhum certificado (aparecem com todas as insígnias cinzas/vazias).
-  const todosProdutosAtivos = await prisma.produto.findMany({
+  const produtosAtivos = await prisma.produto.findMany({
     where: { ativo: true },
-    select: { id: true, nome: true, corCalendario: true, certificadosNecessarios: true },
+    select: {
+      id: true, nome: true, corCalendario: true,
+      temasOficiais: {
+        where: { ativo: true },
+        select: { id: true, posicao: true, nome: true },
+        orderBy: { posicao: 'asc' },
+      },
+    },
     orderBy: { nome: 'asc' },
   });
-  const carteirinhaProdutos = todosProdutosAtivos.map((produto) => {
-    const grupo = certificadosPorProduto.find((g) => g.produto.id === produto.id);
+
+  const carteirinhaProdutos = produtosAtivos.map((produto) => {
+    const insignias = produto.temasOficiais.map((tema) => {
+      const cert = certificadoPorTema.get(tema.id);
+      const validoAte = cert ? calcularValidoAte(cert.emitidoEm) : null;
+      const preenchida = Boolean(cert) && agora < validoAte;
+      return {
+        temaOficialId: tema.id,
+        posicao: tema.posicao,
+        nome: tema.nome,
+        preenchida,
+        percentual: cert?.percentual ?? null,
+        emitidoEm: cert?.emitidoEm ?? null,
+        validoAte,
+      };
+    });
+
+    const qtdCertificadosValidos = insignias.filter((i) => i.preenchida).length;
+    const apto = insignias.length > 0 && qtdCertificadosValidos === insignias.length;
+
     return {
       produto: { id: produto.id, nome: produto.nome, corCalendario: produto.corCalendario },
-      certificadosNecessarios: produto.certificadosNecessarios,
-      qtdCertificadosValidos: grupo ? grupo.qtdCertificadosValidos : 0,
-      apto: grupo ? grupo.apto : false,
+      certificadosNecessarios: insignias.length,
+      qtdCertificadosValidos,
+      apto,
+      insignias,
     };
   });
 
@@ -166,7 +152,6 @@ async function detalhar(req, res) {
     creci: corretor.creci,
     empresa: corretor.empresa,
     fotoUrl: await getFileUrl(corretor.fotoUrl),
-    certificadosPorProduto,
     carteirinhaProdutos,
   });
 }

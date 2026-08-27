@@ -39,6 +39,14 @@ function certificadoValido(emitidoEm) {
   return new Date() < validoAte;
 }
 
+// "Apto" em um produto = ter certificado válido em CADA Tema Oficial ativo do produto. Como
+// o Certificado agora é único por (temaOficialId + corretorId), contar quantos Temas
+// Oficiais ativos e distintos têm certificado válido — e comparar com o total de Temas
+// Oficiais ativos do produto — é equivalente a checar "um certificado por insígnia", sem
+// precisar percorrer produto a produto: certificadosNecessarios é sempre igual à
+// quantidade de Temas Oficiais ativos daquele produto (mantidos em sincronia pela tela de
+// cadastro do Produto).
+
 // ---- 1) Consolidado por produto: treinamentos realizados, presentes, aptos ----
 // Filtros: empresaId (opcional), dataInicio/dataFim (opcional). Sem período informado,
 // considera todo o histórico até hoje (nunca treinamentos futuros).
@@ -69,11 +77,11 @@ async function tabelaProdutos(req, res) {
   });
 
   const certificados = await prisma.certificado.findMany({
-    where: { ...(empresaId && { corretor: { empresaId } }) },
+    where: { temaOficialId: { not: null }, ...(empresaId && { corretor: { empresaId } }) },
     select: {
       corretorId: true,
       emitidoEm: true,
-      treinamento: { select: { produtoId: true } },
+      temaOficial: { select: { produtoId: true } },
       corretor: { select: { empresaId: true } },
     },
   });
@@ -99,7 +107,7 @@ async function tabelaProdutos(req, res) {
   const validosPorProdutoEmpresaCorretor = {}; // produtoId -> chaveEmpresa -> corretorId -> qtd
   for (const c of certificados) {
     if (!certificadoValido(c.emitidoEm)) continue;
-    const produtoId = c.treinamento.produtoId;
+    const produtoId = c.temaOficial.produtoId;
     const chaveEmpresa = c.corretor.empresaId || 'sem-empresa';
 
     validosPorProdutoCorretor[produtoId] ??= {};
@@ -156,12 +164,13 @@ async function pizzaAptosEmpresa(req, res) {
   const necessariosPorProduto = Object.fromEntries(produtos.map((p) => [p.id, p.certificadosNecessarios]));
 
   const certificados = await prisma.certificado.findMany({
-    select: { corretorId: true, emitidoEm: true, treinamento: { select: { produtoId: true } } },
+    where: { temaOficialId: { not: null } },
+    select: { corretorId: true, emitidoEm: true, temaOficial: { select: { produtoId: true } } },
   });
 
   const contagem = {}; // corretorId -> produtoId -> qtd válidos
   for (const c of certificados) {
-    const produtoId = c.treinamento.produtoId;
+    const produtoId = c.temaOficial.produtoId;
     if (!(produtoId in necessariosPorProduto)) continue;
     if (!certificadoValido(c.emitidoEm)) continue;
     contagem[c.corretorId] ??= {};

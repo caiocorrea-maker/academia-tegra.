@@ -7,7 +7,7 @@ router.use(autenticar);
 
 router.get('/', produtoController.listar); // todos os perfis podem visualizar
 router.post('/', permitir('ADMIN'), produtoController.criar);
-router.put('/:id', permitir('ADMIN'), produtoController.editar);
+router.put('/:id', permitir('ADMIN', 'SUPERVISOR'), produtoController.editar);
 router.delete('/:id', permitir('ADMIN'), produtoController.inativar);
 
 module.exports = router;

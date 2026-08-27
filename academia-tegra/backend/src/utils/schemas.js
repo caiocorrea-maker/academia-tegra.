@@ -51,6 +51,16 @@ const produtoSchema = z.object({
   certificadosNecessarios: z.number().int().min(1).optional(),
 });
 
+// Cadastro/edição de um "slot" (posição/insígnia) de Tema Oficial dentro de um produto.
+// Sempre nasce com prova (não existe Tema Oficial sem prova).
+const temaOficialSchema = z.object({
+  produtoId: z.string().uuid(),
+  posicao: z.number().int().min(1),
+  nome: z.string().min(3),
+  planoTreinamento: z.string().min(3),
+  provaId: z.string().uuid(),
+});
+
 const alternativaSchema = z.object({
   texto: z.string().min(1),
   correta: z.boolean(),
@@ -84,6 +94,11 @@ const treinamentoSchema = z.object({
   planoTreinamento: z.string().min(3),
   temProva: z.boolean(),
   provaId: z.string().uuid().nullable().optional(),
+  // Treinamento obrigatório: vinculado a um Tema Oficial (insígnia) do produto. Quando true,
+  // tema/planoTreinamento/provaId/temProva são sobrescritos pelo backend com os dados do
+  // Tema Oficial — o que o cliente enviar nesses campos é ignorado nesse caso.
+  obrigatorio: z.boolean().optional(),
+  temaOficialId: z.string().uuid().nullable().optional(),
 });
 
 const responderProvaSchema = z.object({
@@ -121,6 +136,7 @@ module.exports = {
   editarCorretorSchema,
   empresaSchema,
   produtoSchema,
+  temaOficialSchema,
   provaModeloSchema,
   editarProvaModeloSchema,
   treinamentoSchema,

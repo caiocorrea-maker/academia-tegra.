@@ -3,14 +3,6 @@ const { materialBibliotecaSchema, editarMaterialBibliotecaSchema } = require('..
 const { HttpError } = require('../middleware/errorHandler');
 const { uploadBuffer, getFileUrl, deleteFile } = require('../config/s3');
 
-const MESES_VALIDADE_CERTIFICADO = 6;
-
-function certificadoValido(emitidoEm) {
-  const validoAte = new Date(emitidoEm);
-  validoAte.setMonth(validoAte.getMonth() + MESES_VALIDADE_CERTIFICADO);
-  return new Date() < validoAte;
-}
-
 // Verifica se um usuário pode gerenciar (cadastrar/editar/excluir) materiais de um produto:
 // admin pode qualquer um; supervisor só os dos produtos vinculados a ele.
 async function podeGerenciarProduto(usuario, produtoId) {
@@ -22,19 +14,14 @@ async function podeGerenciarProduto(usuario, produtoId) {
   return Boolean(vinculado);
 }
 
-// Um corretor só acessa o material se ele não exigir certificado (treinamentoNomeRef vazio)
-// ou se o corretor tiver ao menos um certificado válido de um treinamento com aquele tema,
-// no mesmo produto.
-async function corretorPodeAcessar(corretorId, material) {
-  if (!material.treinamentoNomeRef) return true;
-  const certificados = await prisma.certificado.findMany({
-    where: {
-      corretorId,
-      treinamento: { produtoId: material.produtoId, tema: material.treinamentoNomeRef },
-    },
-    select: { emitidoEm: true },
-  });
-  return certificados.some((c) => certificadoValido(c.emitidoEm));
+// MODO BIBLIOTECA LIVRE: a gente que só liberava material a corretores com certificado
+// válido do treinamento foi desativada a pedido do Caio — todo o conteúdo agora é público
+// a todos os perfis. O campo treinamentoNomeRef continua existindo no cadastro (só não tem
+// mais efeito nenhum) para o caso de a trava ser reativada no futuro — se isso acontecer,
+// o correto é vincular por Tema Oficial (por ID), não mais por nome de texto, para evitar
+// o mesmo tipo de bug que motivou a criação dos Temas Oficiais para os certificados.
+async function corretorPodeAcessar() {
+  return true;
 }
 
 // Lista materiais, com filtro por produto e busca por nome. Visível a todos os perfis.

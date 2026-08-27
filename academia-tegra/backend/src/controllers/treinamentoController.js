@@ -3,27 +3,9 @@ const prisma = require('../config/prisma');
 const { treinamentoSchema } = require('../utils/schemas');
 const { HttpError } = require('../middleware/errorHandler');
 const { uploadBuffer, getFileUrl } = require('../config/s3');
+const { ancorarData, montarDataHora } = require('../utils/datas');
 
 // ---- Helpers ----
-
-// Converte uma data "YYYY-MM-DD" vinda do formulário em um Date "ancorado" ao meio-dia
-// UTC. Isso evita o bug clássico de fuso horário em que salvar a data pura à meia-noite
-// UTC e depois exibi-la em horário de Brasília (UTC-3) faz o dia "voltar" um dia.
-function ancorarData(dataString) {
-  return new Date(`${dataString}T12:00:00Z`);
-}
-
-// Reconstrói o momento exato (data + horário) de um treinamento, assumindo o horário
-// informado como horário de Brasília (UTC-3), para comparações de prazo (ex: início do
-// treinamento, liberação de prova). Extrai a data via getters UTC porque o valor já está
-// ancorado ao meio-dia UTC (ancorarData), então isso é seguro em qualquer fuso do servidor.
-function montarDataHora(dataArmazenada, horario) {
-  const data = new Date(dataArmazenada);
-  const ano = data.getUTCFullYear();
-  const mes = String(data.getUTCMonth() + 1).padStart(2, '0');
-  const dia = String(data.getUTCDate()).padStart(2, '0');
-  return new Date(`${ano}-${mes}-${dia}T${horario}:00-03:00`);
-}
 
 async function contarMetricas(treinamentoId) {
   // Presença agora é sempre confirmada manualmente pelo supervisor/admin (independe de
@@ -65,6 +47,7 @@ async function listarAgenda(req, res) {
       data: t.data,
       horario: t.horario,
       tema: t.tema,
+      obrigatorio: t.obrigatorio,
       qtdInteressados: t.interesses.length,
     }))
   );
@@ -99,6 +82,7 @@ async function listarHistorico(req, res) {
       data: t.data,
       horario: t.horario,
       status: t.status,
+      obrigatorio: t.obrigatorio,
       ...(await contarMetricas(t.id)),
     }))
   );
@@ -117,6 +101,7 @@ async function detalhar(req, res) {
       supervisor: { select: { id: true, nome: true } },
       evidencias: true,
       prova: { include: { questoes: { include: { alternativas: true }, orderBy: { ordem: 'asc' } } } },
+      temaOficial: { select: { id: true, nome: true, posicao: true, ativo: true } },
       interesses: { where: { cancelado: false }, include: { corretor: { select: { id: true, nome: true } } } },
       presencas: { select: { corretorId: true } },
       tentativasProva: {
@@ -173,6 +158,8 @@ async function detalhar(req, res) {
     status: treinamento.status,
     temProva: treinamento.temProva,
     prova,
+    obrigatorio: treinamento.obrigatorio,
+    temaOficial: treinamento.temaOficial,
     evidencias: treinamento.evidencias,
     liberadoEm: treinamento.liberadoEm,
     liberadoExpiraEm: treinamento.liberadoExpiraEm,
@@ -213,21 +200,46 @@ async function criar(req, res) {
     supervisorId = dados.supervisorId;
   }
 
-  if (dados.temProva && !dados.provaId) {
+  // Treinamento obrigatório: precisa de um Tema Oficial ativo do mesmo produto. Os campos
+  // tema/planoTreinamento/provaId/temProva vêm sempre do cadastro do Tema Oficial (o que o
+  // cliente mandar nesses campos é ignorado) — só localTreinamento/data/horário são livres.
+  let dadosFinais = dados;
+  if (dados.obrigatorio) {
+    if (!dados.temaOficialId) {
+      throw new HttpError(400, 'Selecione qual Treinamento Oficial (insígnia) este treinamento representa.');
+    }
+    const temaOficial = await prisma.temaOficial.findUnique({ where: { id: dados.temaOficialId } });
+    if (!temaOficial || !temaOficial.ativo || temaOficial.produtoId !== dados.produtoId) {
+      throw new HttpError(400, 'Treinamento Oficial inválido para este produto.');
+    }
+    dadosFinais = {
+      ...dados,
+      tema: temaOficial.nome,
+      planoTreinamento: temaOficial.planoTreinamento,
+      temProva: true,
+      provaId: temaOficial.provaId,
+    };
+  } else {
+    dadosFinais = { ...dados, obrigatorio: false, temaOficialId: null };
+  }
+
+  if (dadosFinais.temProva && !dadosFinais.provaId) {
     throw new HttpError(400, 'Selecione uma prova ou marque que não haverá prova.');
   }
 
   const treinamento = await prisma.treinamento.create({
     data: {
-      produtoId: dados.produtoId,
+      produtoId: dadosFinais.produtoId,
       supervisorId,
-      data: ancorarData(dados.data),
-      horario: dados.horario,
-      tema: dados.tema,
-      localTreinamento: dados.localTreinamento || null,
-      planoTreinamento: dados.planoTreinamento,
-      temProva: dados.temProva,
-      provaId: dados.temProva ? dados.provaId : null,
+      data: ancorarData(dadosFinais.data),
+      horario: dadosFinais.horario,
+      tema: dadosFinais.tema,
+      localTreinamento: dadosFinais.localTreinamento || null,
+      planoTreinamento: dadosFinais.planoTreinamento,
+      temProva: dadosFinais.temProva,
+      provaId: dadosFinais.temProva ? dadosFinais.provaId : null,
+      obrigatorio: dadosFinais.obrigatorio,
+      temaOficialId: dadosFinais.obrigatorio ? dadosFinais.temaOficialId : null,
     },
   });
 
@@ -243,6 +255,22 @@ async function editar(req, res) {
 
   if (req.usuario.perfil === 'SUPERVISOR' && treinamento.supervisorId !== req.usuario.id) {
     throw new HttpError(403, 'Você só pode editar treinamentos criados por você.');
+  }
+
+  // Treinamento obrigatório: tema/plano/prova/produto vêm travados do Tema Oficial e não
+  // podem ser alterados aqui (o que o cliente enviar nesses campos é ignorado) — só
+  // local/data/horário e o supervisor responsável (Admin) continuam editáveis. Para trocar
+  // o Tema Oficial vinculado, é preciso excluir e criar um novo treinamento.
+  if (treinamento.obrigatorio) {
+    const atualizado = await prisma.treinamento.update({
+      where: { id },
+      data: {
+        ...(dados.data && { data: ancorarData(dados.data) }),
+        ...(dados.horario && { horario: dados.horario }),
+        ...(dados.localTreinamento !== undefined && { localTreinamento: dados.localTreinamento || null }),
+      },
+    });
+    return res.json(atualizado);
   }
 
   let novoSupervisorId;
