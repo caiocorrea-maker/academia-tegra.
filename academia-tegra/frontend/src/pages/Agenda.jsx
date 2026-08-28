@@ -20,8 +20,11 @@ export default function Agenda() {
   const [treinamentoSelecionado, setTreinamentoSelecionado] = useState(null);
   const [produtos, setProdutos] = useState([]);
   const [dataParaCriar, setDataParaCriar] = useState(null);
+  const [produtoFiltroId, setProdutoFiltroId] = useState('');
+  const [apenasMeusTreinamentos, setApenasMeusTreinamentos] = useState(false);
 
   const podeGerenciar = usuario.perfil === 'ADMIN' || usuario.perfil === 'SUPERVISOR';
+  const ehCorretor = usuario.perfil === 'CORRETOR';
 
   const primeiroDiaMes = new Date(ano, mes, 1);
 
@@ -33,9 +36,20 @@ export default function Agenda() {
   }
 
   useEffect(() => { carregarEventos(); }, [ano, mes]);
+  // Lista de produtos para o filtro "Produto" na Agenda — disponível a todos os perfis
+  // (antes só era carregada para Admin/Supervisor, que usam essa lista também no formulário
+  // de criação de treinamento).
   useEffect(() => {
-    if (podeGerenciar) api.get('/produtos').then((res) => setProdutos(res.data));
-  }, [podeGerenciar]);
+    api.get('/produtos').then((res) => setProdutos(res.data));
+  }, []);
+
+  const eventosFiltrados = useMemo(() => {
+    return eventos.filter((e) => {
+      if (produtoFiltroId && e.produto.id !== produtoFiltroId) return false;
+      if (ehCorretor && apenasMeusTreinamentos && !e.meuInteresse) return false;
+      return true;
+    });
+  }, [eventos, produtoFiltroId, apenasMeusTreinamentos, ehCorretor]);
 
   const celulas = useMemo(() => {
     const inicioGrade = new Date(primeiroDiaMes);
@@ -50,7 +64,7 @@ export default function Agenda() {
   }, [ano, mes]);
 
   function eventosDoDia(data) {
-    return eventos.filter((e) => {
+    return eventosFiltrados.filter((e) => {
       const dataEvento = new Date(e.data);
       return (
         dataEvento.getFullYear() === data.getFullYear() &&
@@ -102,6 +116,25 @@ export default function Agenda() {
           Dica: clique em um dia vazio do calendário para agendar um novo treinamento nessa data.
         </p>
       )}
+
+      <div style={{ display: 'flex', gap: 16, alignItems: 'center', flexWrap: 'wrap', marginBottom: 14 }}>
+        <div className="campo" style={{ margin: 0, minWidth: 200 }}>
+          <select value={produtoFiltroId} onChange={(e) => setProdutoFiltroId(e.target.value)}>
+            <option value="">Todos os produtos</option>
+            {produtos.map((p) => <option key={p.id} value={p.id}>{p.nome}</option>)}
+          </select>
+        </div>
+        {ehCorretor && (
+          <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 14, cursor: 'pointer' }}>
+            <input
+              type="checkbox"
+              checked={apenasMeusTreinamentos}
+              onChange={(e) => setApenasMeusTreinamentos(e.target.checked)}
+            />
+            Meus treinamentos
+          </label>
+        )}
+      </div>
 
       <div className="calendario">
         {DIAS_SEMANA.map((d) => <div className="cab" key={d}>{d}</div>)}
