@@ -34,7 +34,7 @@ async function listarAgenda(req, res) {
     include: {
       produto: { select: { id: true, nome: true, corCalendario: true } },
       supervisor: { select: { id: true, nome: true } },
-      interesses: { where: { cancelado: false }, select: { id: true } },
+      interesses: { where: { cancelado: false }, select: { id: true, corretorId: true } },
     },
     orderBy: { data: 'asc' },
   });
@@ -49,6 +49,11 @@ async function listarAgenda(req, res) {
       tema: t.tema,
       obrigatorio: t.obrigatorio,
       qtdInteressados: t.interesses.length,
+      // Só relevante para o perfil CORRETOR (filtro "Meus treinamentos" na Agenda): indica
+      // se o próprio usuário logado demonstrou interesse (e não cancelou) neste treinamento.
+      ...(req.usuario.perfil === 'CORRETOR' && {
+        meuInteresse: t.interesses.some((i) => i.corretorId === req.usuario.id),
+      }),
     }))
   );
 }

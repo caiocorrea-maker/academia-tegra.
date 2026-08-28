@@ -14,12 +14,24 @@ function fimMesAtual() {
   return new Date(Date.UTC(agora.getUTCFullYear(), agora.getUTCMonth() + 1, 0, 23, 59, 59));
 }
 
+// Fim do dia de hoje (23:59:59 UTC). Usado como limite de "até hoje" em vez do instante
+// exato de "agora": como os treinamentos são salvos ancorados ao meio-dia UTC
+// (ver ancorarData em utils/datas.js), comparar contra o instante exato de "agora" fazia um
+// treinamento datado de hoje ser tratado como "futuro" (e ficar de fora dos gráficos) se a
+// consulta acontecesse antes das ~09h de Brasília (12h UTC). Comparando contra o fim do dia
+// de hoje, um treinamento datado de hoje já conta como realizado assim que o dia começa,
+// independente do horário em que o dashboard for consultado.
+function fimDiaAtual() {
+  const agora = new Date();
+  return new Date(Date.UTC(agora.getUTCFullYear(), agora.getUTCMonth(), agora.getUTCDate(), 23, 59, 59));
+}
+
 // Se dataInicio/dataFim vierem (filtro explícito do usuário), usa esse período exatamente
 // como informado. Caso contrário: se padraoMesAtual for true, usa o mês vigente (mas nunca
 // além de hoje); senão, considera todo o histórico até hoje. Em ambos os casos "sem filtro"
-// nunca inclui treinamentos futuros.
+// nunca inclui treinamentos futuros (de amanhã em diante) — mas SEMPRE inclui os de hoje.
 function resolverPeriodo(dataInicio, dataFim, padraoMesAtual) {
-  const agora = new Date();
+  const fimHoje = fimDiaAtual();
 
   if (dataInicio && dataFim) {
     return { gte: new Date(`${dataInicio}T00:00:00Z`), lte: new Date(`${dataFim}T23:59:59Z`) };
@@ -27,10 +39,10 @@ function resolverPeriodo(dataInicio, dataFim, padraoMesAtual) {
 
   if (padraoMesAtual) {
     const fimMes = fimMesAtual();
-    return { gte: inicioMesAtual(), lte: fimMes < agora ? fimMes : agora };
+    return { gte: inicioMesAtual(), lte: fimMes < fimHoje ? fimMes : fimHoje };
   }
 
-  return { lte: agora };
+  return { lte: fimHoje };
 }
 
 function certificadoValido(emitidoEm) {
@@ -54,7 +66,7 @@ function certificadoValido(emitidoEm) {
 async function tabelaProdutos(req, res) {
   const { empresaId, dataInicio, dataFim } = req.query;
   const periodo = resolverPeriodo(dataInicio, dataFim, false);
-  const agora = new Date();
+  const limiteHoje = fimDiaAtual();
 
   const produtos = await prisma.produto.findMany({ where: { ativo: true }, orderBy: { nome: 'asc' } });
   const empresasAtivas = await prisma.empresaVenda.findMany({ where: { ativo: true }, orderBy: { nome: 'asc' } });
@@ -88,14 +100,14 @@ async function tabelaProdutos(req, res) {
 
   const treinamentosRealizadosPorProduto = {};
   for (const t of treinamentos) {
-    if (new Date(t.data) > agora) continue; // conta só treinamentos que já aconteceram
+    if (new Date(t.data) > limiteHoje) continue; // conta só treinamentos até hoje (nunca futuros)
     treinamentosRealizadosPorProduto[t.produtoId] = (treinamentosRealizadosPorProduto[t.produtoId] || 0) + 1;
   }
 
   const presentesPorProduto = {};
   const presentesPorProdutoEmpresa = {}; // produtoId -> chaveEmpresa -> qtd
   for (const p of presencas) {
-    if (new Date(p.treinamento.data) > agora) continue;
+    if (new Date(p.treinamento.data) > limiteHoje) continue;
     const produtoId = p.treinamento.produtoId;
     const chaveEmpresa = p.corretor.empresaId || 'sem-empresa';
     presentesPorProduto[produtoId] = (presentesPorProduto[produtoId] || 0) + 1;
@@ -301,7 +313,7 @@ async function colunaEmpresa(req, res) {
 async function treinamentosPorProduto(req, res) {
   const { dataInicio, dataFim } = req.query;
   const periodo = resolverPeriodo(dataInicio, dataFim, false);
-  const agora = new Date();
+  const limiteHoje = fimDiaAtual();
 
   const produtos = await prisma.produto.findMany({ where: { ativo: true }, orderBy: { nome: 'asc' } });
 
@@ -312,7 +324,7 @@ async function treinamentosPorProduto(req, res) {
 
   const contagem = {};
   for (const t of treinamentos) {
-    if (new Date(t.data) > agora) continue; // "realizados" = já aconteceram
+    if (new Date(t.data) > limiteHoje) continue; // "realizados" = até hoje, nunca futuros
     contagem[t.produtoId] = (contagem[t.produtoId] || 0) + 1;
   }
 
