@@ -56,7 +56,10 @@ async function listarSupervisoresComEstatisticas(req, res) {
 async function contarCorretoresAptos(produtoId, certificadosNecessarios) {
   const agora = new Date();
   const certificados = await prisma.certificado.findMany({
-    where: { treinamento: { produtoId } },
+    // Filtra pelo Tema Oficial (não mais pelo treinamento) e só considera os ATIVOS: um
+    // certificado de uma insígnia removida não deve contar para a aptidão, mesmo que ainda
+    // esteja dentro da validade de 6 meses. Mesma correção aplicada no dashboardController.
+    where: { temaOficialId: { not: null }, temaOficial: { produtoId, ativo: true } },
     select: { corretorId: true, emitidoEm: true },
   });
 

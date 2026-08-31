@@ -36,7 +36,9 @@ async function listarAgenda(req, res) {
       supervisor: { select: { id: true, nome: true } },
       interesses: { where: { cancelado: false }, select: { id: true, corretorId: true } },
     },
-    orderBy: { data: 'asc' },
+    // Dentro de cada dia: por horário (mais cedo primeiro) e, havendo empate no mesmo
+    // horário, pela ordem de cadastro (o criado primeiro aparece primeiro).
+    orderBy: [{ data: 'asc' }, { horario: 'asc' }, { criadoEm: 'asc' }],
   });
 
   res.json(

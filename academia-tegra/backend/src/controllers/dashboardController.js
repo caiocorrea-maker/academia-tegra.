@@ -89,7 +89,10 @@ async function tabelaProdutos(req, res) {
   });
 
   const certificados = await prisma.certificado.findMany({
-    where: { temaOficialId: { not: null }, ...(empresaId && { corretor: { empresaId } }) },
+    // Só conta certificados de Temas Oficiais ATIVOS: se uma insígnia foi removida (reduzindo
+    // "Insígnias p/ aptidão" do produto), um certificado antigo dela não deve mais contar para
+    // a aptidão, mesmo que ainda esteja dentro da validade de 6 meses.
+    where: { temaOficialId: { not: null }, temaOficial: { ativo: true }, ...(empresaId && { corretor: { empresaId } }) },
     select: {
       corretorId: true,
       emitidoEm: true,
@@ -176,7 +179,8 @@ async function pizzaAptosEmpresa(req, res) {
   const necessariosPorProduto = Object.fromEntries(produtos.map((p) => [p.id, p.certificadosNecessarios]));
 
   const certificados = await prisma.certificado.findMany({
-    where: { temaOficialId: { not: null } },
+    // Mesma correção: só considera certificados de Temas Oficiais atualmente ativos.
+    where: { temaOficialId: { not: null }, temaOficial: { ativo: true } },
     select: { corretorId: true, emitidoEm: true, temaOficial: { select: { produtoId: true } } },
   });
 
