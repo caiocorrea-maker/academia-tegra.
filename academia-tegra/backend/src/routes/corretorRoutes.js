@@ -11,6 +11,7 @@ router.use(autenticar);
 
 router.get('/', permitir('ADMIN', 'SUPERVISOR'), corretorController.listar);
 router.get('/:id', corretorController.detalhar); // controller valida se é o próprio perfil
+router.get('/:id/foto-arquivo', corretorController.fotoProxy); // controller valida se é o próprio perfil
 router.put('/perfil/me', permitir('CORRETOR'), corretorController.editarProprio);
 router.put('/perfil/me/foto', permitir('CORRETOR'), upload.uploadFoto.single('foto'), corretorController.atualizarFoto);
 router.put('/:id/ativo', permitir('ADMIN'), corretorController.alternarAtivo);

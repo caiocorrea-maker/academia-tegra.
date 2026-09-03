@@ -3,7 +3,7 @@ const prisma = require('../config/prisma');
 const { cadastroCorretorSchema, editarCorretorSchema } = require('../utils/schemas');
 const { validarCPF } = require('../utils/cpf');
 const { HttpError } = require('../middleware/errorHandler');
-const { getFileUrl, uploadBuffer, deleteFile } = require('../config/s3');
+const { getFileUrl, uploadBuffer, deleteFile, getFileBuffer } = require('../config/s3');
 const sharp = require('sharp');
 
 // Cadastro público/próprio do corretor
@@ -250,4 +250,25 @@ async function alternarAtivo(req, res) {
   res.json(atualizado);
 }
 
-module.exports = { cadastrar, listar, detalhar, editarProprio, excluir, alternarAtivo, atualizarFoto };
+// Serve os bytes da foto de perfil de um corretor através do nosso próprio backend (em vez
+// da URL direta do bucket). Usado só para gerar a imagem da Carteira do Corretor (o
+// <img> normal da tela continua usando a URL direta do bucket, que é mais rápida/eficiente
+// para exibição comum) — ver comentário em config/s3.js:getFileBuffer.
+async function fotoProxy(req, res) {
+  const { id } = req.params;
+
+  if (req.usuario.perfil === 'CORRETOR' && req.usuario.id !== id) {
+    throw new HttpError(403, 'Você só pode visualizar a própria foto.');
+  }
+
+  const corretor = await prisma.usuario.findUnique({ where: { id, perfil: 'CORRETOR' }, select: { fotoUrl: true } });
+  if (!corretor) throw new HttpError(404, 'Corretor não encontrado.');
+  if (!corretor.fotoUrl) throw new HttpError(404, 'Este corretor não tem foto cadastrada.');
+
+  const { buffer, contentType } = await getFileBuffer(corretor.fotoUrl);
+  res.setHeader('Content-Type', contentType);
+  res.setHeader('Cache-Control', 'private, max-age=300');
+  res.send(buffer);
+}
+
+module.exports = { cadastrar, listar, detalhar, editarProprio, excluir, alternarAtivo, atualizarFoto, fotoProxy };

@@ -56,4 +56,17 @@ async function deleteFile(key) {
   await s3.send(new DeleteObjectCommand({ Bucket: BUCKET, Key: key }));
 }
 
-module.exports = { s3, uploadBuffer, getFileUrl, deleteFile };
+// Baixa o conteúdo de um arquivo do bucket como Buffer (server-to-server, sem depender de
+// CORS do bucket). Usado para "proxiar" imagens (ex.: foto de perfil) através do nosso
+// próprio backend, que já tem CORS liberado para o frontend — evita o problema de a imagem
+// "sumir" ao gerar a Carteira do Corretor como PNG (html2canvas não consegue ler pixels de
+// uma imagem cross-origin sem CORS liberado pelo servidor de origem).
+async function getFileBuffer(key) {
+  const comando = new GetObjectCommand({ Bucket: BUCKET, Key: key });
+  const resposta = await s3.send(comando);
+  const pedacos = [];
+  for await (const pedaco of resposta.Body) pedacos.push(pedaco);
+  return { buffer: Buffer.concat(pedacos), contentType: resposta.ContentType || 'application/octet-stream' };
+}
+
+module.exports = { s3, uploadBuffer, getFileUrl, deleteFile, getFileBuffer };

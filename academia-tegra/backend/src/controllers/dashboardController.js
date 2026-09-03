@@ -121,11 +121,14 @@ async function tabelaProdutos(req, res) {
 
   const validosPorProdutoCorretor = {};
   const validosPorProdutoEmpresaCorretor = {}; // produtoId -> chaveEmpresa -> corretorId -> qtd
-  // Nota média do produto: média do percentual de acerto (0-100) de todos os certificados
-  // válidos hoje (de Temas Oficiais ativos), independente de quantas insígnias faltam para
-  // o corretor ficar apto — cada certificado individual entra na média.
+  // Nota média do produto (e por empresa, para o drill-down): média do percentual de acerto
+  // (0-100) de todos os certificados válidos hoje (de Temas Oficiais ativos), independente de
+  // quantas insígnias faltam para o corretor ficar apto — cada certificado individual entra
+  // na média.
   const somaNotaPorProduto = {};
   const qtdNotaPorProduto = {};
+  const somaNotaPorProdutoEmpresa = {}; // produtoId -> chaveEmpresa -> soma
+  const qtdNotaPorProdutoEmpresa = {}; // produtoId -> chaveEmpresa -> qtd
   for (const c of certificados) {
     if (!certificadoValido(c.emitidoEm)) continue;
     const produtoId = c.temaOficial.produtoId;
@@ -142,6 +145,11 @@ async function tabelaProdutos(req, res) {
     if (c.percentual != null) {
       somaNotaPorProduto[produtoId] = (somaNotaPorProduto[produtoId] || 0) + c.percentual;
       qtdNotaPorProduto[produtoId] = (qtdNotaPorProduto[produtoId] || 0) + 1;
+
+      somaNotaPorProdutoEmpresa[produtoId] ??= {};
+      qtdNotaPorProdutoEmpresa[produtoId] ??= {};
+      somaNotaPorProdutoEmpresa[produtoId][chaveEmpresa] = (somaNotaPorProdutoEmpresa[produtoId][chaveEmpresa] || 0) + c.percentual;
+      qtdNotaPorProdutoEmpresa[produtoId][chaveEmpresa] = (qtdNotaPorProdutoEmpresa[produtoId][chaveEmpresa] || 0) + 1;
     }
   }
 
@@ -160,7 +168,10 @@ async function tabelaProdutos(req, res) {
         const presentesEmpresa = (presentesPorProdutoEmpresa[p.id] || {})[chave] || 0;
         const porCorretorEmpresa = (validosPorProdutoEmpresaCorretor[p.id] || {})[chave] || {};
         const aptosEmpresa = Object.values(porCorretorEmpresa).filter((qtd) => qtd >= p.certificadosNecessarios).length;
-        return { nome, presentes: presentesEmpresa, aptos: aptosEmpresa };
+        const somaEmpresa = (somaNotaPorProdutoEmpresa[p.id] || {})[chave];
+        const qtdEmpresa = (qtdNotaPorProdutoEmpresa[p.id] || {})[chave];
+        const notaMediaEmpresa = qtdEmpresa ? somaEmpresa / qtdEmpresa : null;
+        return { nome, presentes: presentesEmpresa, notaMedia: notaMediaEmpresa, aptos: aptosEmpresa };
       })
       .sort((a, b) => b.presentes - a.presentes);
 
