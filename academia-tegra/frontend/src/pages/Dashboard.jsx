@@ -292,7 +292,7 @@ export default function Dashboard() {
                           <td style={{ padding: '6px 6px 6px 34px' }}>↳ {e.nome}</td>
                           <td style={{ padding: '6px' }}>-</td>
                           <td style={{ padding: '6px' }}>{e.presentes}</td>
-                          <td style={{ padding: '6px' }}>-</td>
+                          <td style={{ padding: '6px' }}>{e.notaMedia != null ? `${e.notaMedia.toFixed(0)}%` : '-'}</td>
                           <td style={{ padding: '6px' }}>{e.aptos}</td>
                         </tr>
                       ))}

@@ -96,7 +96,7 @@ export default function Treinamentos() {
             <thead>
               <tr>
                 <th>Produto</th><th>Supervisor</th><th>Tema</th><th>Data</th><th>Horário</th>
-                <th>Interessados</th><th>Presentes</th><th>Taxa de presença</th><th>Aprovados</th><th>Taxa de aprovação</th>
+                <th>Interessados</th><th>Presentes</th><th>Aprovados</th>
               </tr>
             </thead>
             <tbody>
@@ -108,14 +108,12 @@ export default function Treinamentos() {
                   <td>{new Date(t.data).toLocaleDateString('pt-BR')}</td>
                   <td>{t.horario}</td>
                   <td>{t.interessados}</td>
-                  <td>{t.presentes}</td>
-                  <td>{t.taxaPresenca != null ? `${t.taxaPresenca}%` : '-'}</td>
-                  <td>{t.aprovados}</td>
-                  <td>{t.taxaAprovacao != null ? `${t.taxaAprovacao}%` : '-'}</td>
+                  <td>{t.presentes}{t.taxaPresenca != null && <span style={{ color: '#888' }}> ({t.taxaPresenca}%)</span>}</td>
+                  <td>{t.aprovados}{t.taxaAprovacao != null && <span style={{ color: '#888' }}> ({t.taxaAprovacao}%)</span>}</td>
                 </tr>
               ))}
               {historico.length === 0 && (
-                <tr><td colSpan={10} style={{ textAlign: 'center', color: '#888' }}>Nenhum treinamento encontrado.</td></tr>
+                <tr><td colSpan={8} style={{ textAlign: 'center', color: '#888' }}>Nenhum treinamento encontrado.</td></tr>
               )}
             </tbody>
           </table>

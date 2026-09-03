@@ -11,6 +11,7 @@ function formatarData(d) {
 export default function CarteirinhaCorretor({ dados, podeEditarFoto, aoAtualizarFoto }) {
   const inputRef = useRef(null);
   const carteirinhaRef = useRef(null);
+  const fotoRef = useRef(null);
   const [enviando, setEnviando] = useState(false);
   const [gerandoImagem, setGerandoImagem] = useState(false);
   const [erro, setErro] = useState('');
@@ -26,9 +27,32 @@ export default function CarteirinhaCorretor({ dados, podeEditarFoto, aoAtualizar
 
   async function gerarImagem() {
     if (!carteirinhaRef.current) return null;
-    // Usamos scale 2 para gerar uma imagem em boa resolução (a carteirinha na tela é pequena).
-    const canvas = await html2canvas(carteirinhaRef.current, { scale: 2, backgroundColor: '#ffffff', useCORS: true });
-    return new Promise((resolve) => canvas.toBlob((blob) => resolve(blob), 'image/png'));
+    // A foto de perfil vem direto do bucket (B2), que é uma origem diferente da do site —
+    // sem CORS liberado pelo bucket, o navegador desenha a imagem normalmente na tela, mas
+    // se recusa a "ler" os pixels dela pra gerar o PNG (ela fica em branco no resultado).
+    // Para contornar isso sem depender de configurar CORS no bucket, buscamos a foto pelo
+    // nosso próprio backend (que já libera CORS para o site) e trocamos temporariamente a
+    // imagem na tela por essa cópia, só durante a geração do PNG.
+    let srcOriginal = null;
+    let blobUrlFoto = null;
+    try {
+      if (fotoRef.current && dados.id) {
+        const res = await api.get(`/corretores/${dados.id}/foto-arquivo`, { responseType: 'blob' });
+        blobUrlFoto = URL.createObjectURL(res.data);
+        srcOriginal = fotoRef.current.src;
+        await new Promise((resolve, reject) => {
+          fotoRef.current.onload = resolve;
+          fotoRef.current.onerror = reject;
+          fotoRef.current.src = blobUrlFoto;
+        });
+      }
+
+      const canvas = await html2canvas(carteirinhaRef.current, { scale: 2, backgroundColor: '#ffffff', useCORS: true });
+      return await new Promise((resolve) => canvas.toBlob((blob) => resolve(blob), 'image/png'));
+    } finally {
+      if (fotoRef.current && srcOriginal) fotoRef.current.src = srcOriginal;
+      if (blobUrlFoto) URL.revokeObjectURL(blobUrlFoto);
+    }
   }
 
   async function baixarComoImagem() {
@@ -102,7 +126,7 @@ export default function CarteirinhaCorretor({ dados, podeEditarFoto, aoAtualizar
       <div className="carteirinha-corpo">
         <div className="carteirinha-foto-wrap">
           {dados.fotoUrl ? (
-            <img src={dados.fotoUrl} alt={dados.nome} className="carteirinha-foto" />
+            <img ref={fotoRef} src={dados.fotoUrl} alt={dados.nome} className="carteirinha-foto" />
           ) : (
             <div className="carteirinha-foto carteirinha-foto-vazia">Sem foto</div>
           )}
