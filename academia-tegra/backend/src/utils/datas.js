@@ -17,4 +17,15 @@ function montarDataHora(dataArmazenada, horario) {
   return new Date(`${ano}-${mes}-${dia}T${horario}:00-03:00`);
 }
 
-module.exports = { ancorarData, montarDataHora };
+// Retorna true se o dia do treinamento (ignorando o horário específico) já ficou no
+// passado em relação a hoje. O treinamento ainda pode receber ações (como dar presença)
+// durante o próprio dia em que acontece, mas não mais a partir do dia seguinte.
+function diaJaPassou(dataArmazenada) {
+  const data = new Date(dataArmazenada);
+  const hoje = new Date();
+  const diaTreinamento = Date.UTC(data.getUTCFullYear(), data.getUTCMonth(), data.getUTCDate());
+  const diaHoje = Date.UTC(hoje.getUTCFullYear(), hoje.getUTCMonth(), hoje.getUTCDate());
+  return diaTreinamento < diaHoje;
+}
+
+module.exports = { ancorarData, montarDataHora, diaJaPassou };

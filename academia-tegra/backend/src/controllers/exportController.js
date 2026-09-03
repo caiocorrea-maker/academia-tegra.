@@ -1,5 +1,6 @@
 const ExcelJS = require('exceljs');
 const prisma = require('../config/prisma');
+const { certificadoValido, validoAte } = require('../utils/aptidao');
 
 // Exporta histórico de treinamentos para Excel, com os mesmos filtros do histórico.
 // Não inclui evidências (PNG/JPG), conforme especificação.
@@ -36,13 +37,20 @@ async function exportarTreinamentos(req, res) {
     { header: 'Horário', key: 'horario', width: 12 },
     { header: 'Interessados', key: 'interessados', width: 15 },
     { header: 'Presentes', key: 'presentes', width: 12 },
+    { header: 'Taxa de presença', key: 'taxaPresenca', width: 16 },
     { header: 'Aprovados', key: 'aprovados', width: 12 },
+    { header: 'Taxa de aprovação', key: 'taxaAprovacao', width: 16 },
   ];
   sheet.getRow(1).font = { bold: true };
 
   for (const t of treinamentos) {
+    const interessados = t.interesses.length;
     const presentes = t.presencas.length;
     const aprovados = t.tentativasProva.filter((tp) => tp.aprovado).length;
+    // Taxa de presença = presentes / interessados. Taxa de aprovação = aprovados / presentes.
+    // Sem interessados/presentes ainda, deixamos em branco (não faz sentido dividir por 0).
+    const taxaPresenca = interessados > 0 ? `${Math.round((presentes / interessados) * 100)}%` : '-';
+    const taxaAprovacao = presentes > 0 ? `${Math.round((aprovados / presentes) * 100)}%` : '-';
 
     sheet.addRow({
       produto: t.produto.nome,
@@ -50,14 +58,16 @@ async function exportarTreinamentos(req, res) {
       tema: t.tema,
       data: new Date(t.data).toLocaleDateString('pt-BR'),
       horario: t.horario,
-      interessados: t.interesses.length,
+      interessados,
       presentes,
+      taxaPresenca,
       aprovados,
+      taxaAprovacao,
     });
   }
 
   res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
-  res.setHeader('Content-Disposition', 'attachment; filename="treinamentos_academia_tegra.xlsx"');
+  res.setHeader('Content-Disposition', 'attachment; filename="extracao_resumo_treinamentos_academia_tegra.xlsx"');
 
   await workbook.xlsx.write(res);
   res.end();
@@ -143,4 +153,94 @@ async function exportarPresencas(req, res) {
   res.end();
 }
 
-module.exports = { exportarTreinamentos, exportarPresencas };
+// Exporta os corretores aptos a tirar plantão. Sem produtoId, considera todos os produtos
+// ativos (respeitando, para Supervisor, só os produtos vinculados a ele); com produtoId,
+// exporta só daquele produto (usado pelo botão "Corretores aptos" dentro da tela de um
+// Produto específico).
+async function exportarCorretoresAptos(req, res) {
+  const { produtoId } = req.query;
+
+  let produtos;
+  if (produtoId) {
+    const produto = await prisma.produto.findUnique({ where: { id: produtoId } });
+    if (!produto) return res.status(404).json({ erro: 'Produto não encontrado.' });
+    if (req.usuario.perfil === 'SUPERVISOR') {
+      const vinculo = await prisma.produtoSupervisor.findUnique({
+        where: { produtoId_supervisorId: { produtoId, supervisorId: req.usuario.id } },
+      });
+      if (!vinculo) return res.status(403).json({ erro: 'Você não tem acesso a este produto.' });
+    }
+    produtos = [produto];
+  } else if (req.usuario.perfil === 'SUPERVISOR') {
+    const vinculos = await prisma.produtoSupervisor.findMany({
+      where: { supervisorId: req.usuario.id },
+      select: { produto: true },
+    });
+    produtos = vinculos.map((v) => v.produto).filter((p) => p.ativo);
+  } else {
+    produtos = await prisma.produto.findMany({ where: { ativo: true } });
+  }
+
+  const workbook = new ExcelJS.Workbook();
+  workbook.creator = 'Academia Tegra';
+  const sheet = workbook.addWorksheet('Corretores aptos');
+
+  sheet.columns = [
+    { header: 'Produto', key: 'produto', width: 25 },
+    { header: 'Nome do Corretor', key: 'nome', width: 30 },
+    { header: 'Imobiliária', key: 'empresa', width: 25 },
+    { header: 'Gerente', key: 'gerente', width: 22 },
+    { header: 'Diretor', key: 'diretor', width: 22 },
+    { header: 'Nota média', key: 'notaMedia', width: 12 },
+    { header: 'Data de validade', key: 'validade', width: 16 },
+  ];
+  sheet.getRow(1).font = { bold: true };
+
+  for (const produto of produtos) {
+    const certificados = await prisma.certificado.findMany({
+      // Só Temas Oficiais ativos contam para aptidão (mesma regra do dashboard).
+      where: { temaOficialId: { not: null }, temaOficial: { produtoId: produto.id, ativo: true } },
+      select: {
+        corretorId: true,
+        emitidoEm: true,
+        percentual: true,
+        corretor: { select: { nome: true, gerente: true, diretor: true, empresa: { select: { nome: true } } } },
+      },
+    });
+
+    const porCorretor = {}; // corretorId -> { certs: [...], corretor }
+    for (const c of certificados) {
+      if (!certificadoValido(c.emitidoEm)) continue;
+      porCorretor[c.corretorId] ??= { certs: [], corretor: c.corretor };
+      porCorretor[c.corretorId].certs.push(c);
+    }
+
+    for (const { certs, corretor } of Object.values(porCorretor)) {
+      if (certs.length < produto.certificadosNecessarios) continue; // não apto: faltam insígnias
+
+      const notaMedia = certs.reduce((soma, c) => soma + c.percentual, 0) / certs.length;
+      // Data de validade = a do certificado mais próximo de vencer entre os que compõem a aptidão.
+      const dataValidade = certs
+        .map((c) => validoAte(c.emitidoEm))
+        .reduce((maisProxima, atual) => (atual < maisProxima ? atual : maisProxima));
+
+      sheet.addRow({
+        produto: produto.nome,
+        nome: corretor.nome,
+        empresa: corretor.empresa?.nome || '-',
+        gerente: corretor.gerente || '-',
+        diretor: corretor.diretor || '-',
+        notaMedia: `${notaMedia.toFixed(0)}%`,
+        validade: dataValidade.toLocaleDateString('pt-BR'),
+      });
+    }
+  }
+
+  res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+  res.setHeader('Content-Disposition', 'attachment; filename="corretores_aptos_academia_tegra.xlsx"');
+
+  await workbook.xlsx.write(res);
+  res.end();
+}
+
+module.exports = { exportarTreinamentos, exportarPresencas, exportarCorretoresAptos };

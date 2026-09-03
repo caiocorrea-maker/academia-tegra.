@@ -96,6 +96,7 @@ async function tabelaProdutos(req, res) {
     select: {
       corretorId: true,
       emitidoEm: true,
+      percentual: true,
       temaOficial: { select: { produtoId: true } },
       corretor: { select: { empresaId: true } },
     },
@@ -120,6 +121,11 @@ async function tabelaProdutos(req, res) {
 
   const validosPorProdutoCorretor = {};
   const validosPorProdutoEmpresaCorretor = {}; // produtoId -> chaveEmpresa -> corretorId -> qtd
+  // Nota média do produto: média do percentual de acerto (0-100) de todos os certificados
+  // válidos hoje (de Temas Oficiais ativos), independente de quantas insígnias faltam para
+  // o corretor ficar apto — cada certificado individual entra na média.
+  const somaNotaPorProduto = {};
+  const qtdNotaPorProduto = {};
   for (const c of certificados) {
     if (!certificadoValido(c.emitidoEm)) continue;
     const produtoId = c.temaOficial.produtoId;
@@ -132,6 +138,11 @@ async function tabelaProdutos(req, res) {
     validosPorProdutoEmpresaCorretor[produtoId][chaveEmpresa] ??= {};
     validosPorProdutoEmpresaCorretor[produtoId][chaveEmpresa][c.corretorId] =
       (validosPorProdutoEmpresaCorretor[produtoId][chaveEmpresa][c.corretorId] || 0) + 1;
+
+    if (c.percentual != null) {
+      somaNotaPorProduto[produtoId] = (somaNotaPorProduto[produtoId] || 0) + c.percentual;
+      qtdNotaPorProduto[produtoId] = (qtdNotaPorProduto[produtoId] || 0) + 1;
+    }
   }
 
   const linhas = produtos.map((p) => {
@@ -160,6 +171,7 @@ async function tabelaProdutos(req, res) {
       treinamentosRealizados: treinamentosRealizadosPorProduto[p.id] || 0,
       presentes: presentesPorProduto[p.id] || 0,
       aptos,
+      notaMedia: qtdNotaPorProduto[p.id] ? somaNotaPorProduto[p.id] / qtdNotaPorProduto[p.id] : null,
       porEmpresa,
     };
   });

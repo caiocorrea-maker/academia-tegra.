@@ -3,7 +3,7 @@ const prisma = require('../config/prisma');
 const { treinamentoSchema } = require('../utils/schemas');
 const { HttpError } = require('../middleware/errorHandler');
 const { uploadBuffer, getFileUrl } = require('../config/s3');
-const { ancorarData, montarDataHora } = require('../utils/datas');
+const { ancorarData, montarDataHora, diaJaPassou } = require('../utils/datas');
 
 // ---- Helpers ----
 
@@ -16,7 +16,11 @@ async function contarMetricas(treinamentoId) {
     prisma.tentativaProva.count({ where: { treinamentoId, status: 'CONCLUIDA', aprovado: true } }),
   ]);
 
-  return { interessados, presentes, aprovados };
+  // Taxa de presença = presentes / interessados. Taxa de aprovação = aprovados / presentes.
+  const taxaPresenca = interessados > 0 ? Math.round((presentes / interessados) * 100) : null;
+  const taxaAprovacao = presentes > 0 ? Math.round((aprovados / presentes) * 100) : null;
+
+  return { interessados, presentes, aprovados, taxaPresenca, taxaAprovacao };
 }
 
 // ---- Agenda / Listagem ----
@@ -487,6 +491,9 @@ async function definirPresenca(req, res) {
   }
 
   if (confirmado) {
+    if (diaJaPassou(treinamento.data)) {
+      throw new HttpError(400, 'Não é mais possível dar presença: a data deste treinamento já passou.');
+    }
     await prisma.presenca.upsert({
       where: { treinamentoId_corretorId: { treinamentoId: id, corretorId } },
       update: {},
