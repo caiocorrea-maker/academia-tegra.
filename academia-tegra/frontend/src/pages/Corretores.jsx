@@ -10,6 +10,7 @@ export default function Corretores() {
   const [empresas, setEmpresas] = useState([]);
   const [busca, setBusca] = useState('');
   const [empresaId, setEmpresaId] = useState('');
+  const [exportandoAptos, setExportandoAptos] = useState(false);
   const navigate = useNavigate();
 
   useEffect(() => { api.get('/empresas').then((res) => setEmpresas(res.data)); }, []);
@@ -35,9 +36,34 @@ export default function Corretores() {
     }
   }
 
+  async function exportarAptos() {
+    setExportandoAptos(true);
+    try {
+      // Sem produtoId: traz aptos de todos os produtos (para Supervisor, só os vinculados a
+      // ele — o backend já filtra isso automaticamente).
+      const res = await api.get('/exportar/corretores-aptos', { responseType: 'blob' });
+      const url = window.URL.createObjectURL(new Blob([res.data]));
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = 'corretores_aptos_academia_tegra.xlsx';
+      link.click();
+    } catch (err) {
+      alert('Não foi possível gerar a extração de corretores aptos.');
+    } finally {
+      setExportandoAptos(false);
+    }
+  }
+
   return (
     <Layout>
-      <h2>Corretores</h2>
+      <div className="topo-pagina">
+        <h2 style={{ margin: 0 }}>Corretores</h2>
+        {usuario.perfil !== 'CORRETOR' && (
+          <button className="btn btn-secundario" onClick={exportarAptos} disabled={exportandoAptos}>
+            {exportandoAptos ? 'Gerando...' : 'Corretores aptos'}
+          </button>
+        )}
+      </div>
 
       <div className="filtros">
         <input placeholder="Buscar por nome..." value={busca} onChange={(e) => setBusca(e.target.value)} />

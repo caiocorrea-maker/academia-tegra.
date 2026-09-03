@@ -47,7 +47,7 @@ export default function Treinamentos() {
   async function exportar(tipo) {
     const params = Object.fromEntries(Object.entries(filtros).filter(([, v]) => v));
     const rota = tipo === 'presenca' ? '/exportar/presencas' : '/exportar/treinamentos';
-    const nomeArquivo = tipo === 'presenca' ? 'presenca_academia_tegra.xlsx' : 'treinamentos_academia_tegra.xlsx';
+    const nomeArquivo = tipo === 'presenca' ? 'presenca_academia_tegra.xlsx' : 'extracao_resumo_treinamentos_academia_tegra.xlsx';
     const res = await api.get(rota, { params, responseType: 'blob' });
     const url = window.URL.createObjectURL(new Blob([res.data]));
     const link = document.createElement('a');
@@ -61,7 +61,7 @@ export default function Treinamentos() {
       <div className="topo-pagina">
         <h2 style={{ margin: 0 }}>Treinamentos</h2>
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-          <button className="btn btn-secundario" onClick={() => exportar('resumo')}>Exportar Excel (resumo)</button>
+          <button className="btn btn-secundario" onClick={() => exportar('resumo')}>Extração resumo treinamentos</button>
           <button className="btn btn-secundario" onClick={() => exportar('presenca')}>Extração de presença</button>
           <button className="btn btn-secundario" onClick={() => setMostrarProvas(true)}>Gerenciar Provas</button>
           <button className="btn" onClick={() => setMostrarForm(true)}>+ Novo Treinamento</button>
@@ -96,7 +96,7 @@ export default function Treinamentos() {
             <thead>
               <tr>
                 <th>Produto</th><th>Supervisor</th><th>Tema</th><th>Data</th><th>Horário</th>
-                <th>Interessados</th><th>Presentes</th><th>Aprovados</th>
+                <th>Interessados</th><th>Presentes</th><th>Taxa de presença</th><th>Aprovados</th><th>Taxa de aprovação</th>
               </tr>
             </thead>
             <tbody>
@@ -109,11 +109,13 @@ export default function Treinamentos() {
                   <td>{t.horario}</td>
                   <td>{t.interessados}</td>
                   <td>{t.presentes}</td>
+                  <td>{t.taxaPresenca != null ? `${t.taxaPresenca}%` : '-'}</td>
                   <td>{t.aprovados}</td>
+                  <td>{t.taxaAprovacao != null ? `${t.taxaAprovacao}%` : '-'}</td>
                 </tr>
               ))}
               {historico.length === 0 && (
-                <tr><td colSpan={8} style={{ textAlign: 'center', color: '#888' }}>Nenhum treinamento encontrado.</td></tr>
+                <tr><td colSpan={10} style={{ textAlign: 'center', color: '#888' }}>Nenhum treinamento encontrado.</td></tr>
               )}
             </tbody>
           </table>

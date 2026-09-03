@@ -32,6 +32,11 @@ export default function TreinamentoModal({ treinamentoId, aoFechar, aoAtualizar 
   const agora = new Date();
   const dataHoraTreinamento = dados ? new Date(`${new Date(dados.data).toISOString().slice(0, 10)}T${dados.horario}`) : null;
   const antesDoTreinamento = dataHoraTreinamento && agora < dataHoraTreinamento;
+  // Dia do treinamento já passou (comparação por dia, não por horário exato — o dia inteiro
+  // do treinamento ainda permite dar presença, só trava a partir do dia seguinte).
+  const diaTreinamentoJaPassou = dados
+    ? new Date(dados.data).toISOString().slice(0, 10) < new Date().toISOString().slice(0, 10)
+    : false;
 
   async function toggleInteresse() {
     setErro('');
@@ -236,10 +241,17 @@ export default function TreinamentoModal({ treinamentoId, aoFechar, aoAtualizar 
                       <button
                         className={`btn ${c.presencaConfirmada ? 'btn-secundario' : ''}`}
                         style={{ padding: '4px 10px', fontSize: 12 }}
-                        disabled={alterandoPresenca === c.id}
+                        disabled={alterandoPresenca === c.id || (!c.presencaConfirmada && diaTreinamentoJaPassou)}
+                        title={!c.presencaConfirmada && diaTreinamentoJaPassou ? 'A data deste treinamento já passou.' : undefined}
                         onClick={() => alternarPresenca(c.id, !c.presencaConfirmada)}
                       >
-                        {alterandoPresenca === c.id ? '...' : c.presencaConfirmada ? '✔ Presença confirmada' : 'Confirmar presença'}
+                        {alterandoPresenca === c.id
+                          ? '...'
+                          : c.presencaConfirmada
+                          ? '✔ Presença confirmada'
+                          : diaTreinamentoJaPassou
+                          ? 'Data encerrada'
+                          : 'Confirmar presença'}
                       </button>
                     </div>
                   ))}

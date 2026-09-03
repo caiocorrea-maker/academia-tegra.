@@ -38,7 +38,7 @@ export default function Produto() {
       </div>
 
       <table>
-        <thead><tr><th>Nome</th><th>Cor</th><th>Insígnias p/ aptidão</th><th></th></tr></thead>
+        <thead><tr><th>Nome</th><th>Cor</th><th>Certificados p/ tirar plantão</th><th></th></tr></thead>
         <tbody>
           {produtos.map((p) => (
             <tr key={p.id} style={{ cursor: 'pointer' }} onClick={() => abrirEdicao(p)}>
@@ -115,7 +115,7 @@ function ModalNovoProduto({ aoFechar, aoSalvar }) {
             </div>
           </div>
           <div className="campo">
-            <label>Insígnias (certificados) necessárias para o corretor ficar "apto a plantão"</label>
+            <label>Certificados necessários para o corretor tirar plantão</label>
             <input
               type="number" min={1} value={form.certificadosNecessarios}
               onChange={(e) => setForm((f) => ({ ...f, certificadosNecessarios: e.target.value }))}
@@ -144,6 +144,7 @@ function ModalEditarProduto({ produto, ehSupervisor, aoFechar }) {
   const [temas, setTemas] = useState([]);
   const [erro, setErro] = useState('');
   const [salvando, setSalvando] = useState(false);
+  const [exportandoAptos, setExportandoAptos] = useState(false);
   const [slotAberto, setSlotAberto] = useState(null); // posicao sendo cadastrada/editada
 
   async function carregarTemas() {
@@ -151,6 +152,22 @@ function ModalEditarProduto({ produto, ehSupervisor, aoFechar }) {
     setTemas(res.data);
   }
   useEffect(() => { carregarTemas(); }, []);
+
+  async function exportarAptos() {
+    setExportandoAptos(true);
+    try {
+      const res = await api.get('/exportar/corretores-aptos', { params: { produtoId: produto.id }, responseType: 'blob' });
+      const url = window.URL.createObjectURL(new Blob([res.data]));
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `corretores_aptos_${produto.nome.replace(/\s+/g, '_').toLowerCase()}.xlsx`;
+      link.click();
+    } catch (err) {
+      setErro('Não foi possível gerar a extração de corretores aptos.');
+    } finally {
+      setExportandoAptos(false);
+    }
+  }
 
   async function salvarProduto(e) {
     e.preventDefault();
@@ -207,7 +224,7 @@ function ModalEditarProduto({ produto, ehSupervisor, aoFechar }) {
             </div>
           </div>
           <div className="campo">
-            <label>Insígnias (certificados) necessárias para o corretor ficar "apto a plantão"</label>
+            <label>Certificados necessários para o corretor tirar plantão</label>
             <input
               type="number" min={1} value={form.certificadosNecessarios}
               onChange={(e) => setForm((f) => ({ ...f, certificadosNecessarios: e.target.value }))}
@@ -217,6 +234,9 @@ function ModalEditarProduto({ produto, ehSupervisor, aoFechar }) {
               Reduzir esse número inativa as insígnias excedentes (o histórico é mantido). Aumentar de volta reativa
               as que existiam antes, na mesma posição.
             </p>
+            <button type="button" className="btn btn-secundario" onClick={exportarAptos} disabled={exportandoAptos}>
+              {exportandoAptos ? 'Gerando...' : 'Corretores aptos'}
+            </button>
           </div>
           {erro && <p className="erro">{erro}</p>}
           <div style={{ display: 'flex', gap: 8 }}>

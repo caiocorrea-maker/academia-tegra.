@@ -1,4 +1,5 @@
 import { useRef, useState } from 'react';
+import html2canvas from 'html2canvas';
 import InsigniaSelo from './InsigniaSelo';
 import { formatarCPF } from '../utils/formatadores';
 import api from '../services/api';
@@ -9,9 +10,66 @@ function formatarData(d) {
 
 export default function CarteirinhaCorretor({ dados, podeEditarFoto, aoAtualizarFoto }) {
   const inputRef = useRef(null);
+  const carteirinhaRef = useRef(null);
   const [enviando, setEnviando] = useState(false);
+  const [gerandoImagem, setGerandoImagem] = useState(false);
   const [erro, setErro] = useState('');
   const [insigniaSelecionada, setInsigniaSelecionada] = useState(null); // { produtoNome, insignia }
+
+  // Compartilhamento de arquivo (Web Share API nível 2) só existe em navegadores mobile
+  // modernos (Chrome/Safari no Android/iPhone). Em desktop, geralmente não existe — nesse
+  // caso deixamos só o botão de baixar.
+  const suportaCompartilharArquivo =
+    typeof navigator !== 'undefined' &&
+    navigator.canShare &&
+    navigator.canShare({ files: [new File([], 'teste.png', { type: 'image/png' })] });
+
+  async function gerarImagem() {
+    if (!carteirinhaRef.current) return null;
+    // Usamos scale 2 para gerar uma imagem em boa resolução (a carteirinha na tela é pequena).
+    const canvas = await html2canvas(carteirinhaRef.current, { scale: 2, backgroundColor: '#ffffff', useCORS: true });
+    return new Promise((resolve) => canvas.toBlob((blob) => resolve(blob), 'image/png'));
+  }
+
+  async function baixarComoImagem() {
+    setErro('');
+    setGerandoImagem(true);
+    try {
+      const blob = await gerarImagem();
+      if (!blob) throw new Error();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `carteira-${(dados.nome || 'corretor').replace(/\s+/g, '-').toLowerCase()}.png`;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch {
+      setErro('Não foi possível gerar a imagem da carteira.');
+    } finally {
+      setGerandoImagem(false);
+    }
+  }
+
+  async function compartilharImagem() {
+    setErro('');
+    setGerandoImagem(true);
+    try {
+      const blob = await gerarImagem();
+      if (!blob) throw new Error();
+      const arquivo = new File([blob], 'carteira-do-corretor.png', { type: 'image/png' });
+      await navigator.share({
+        files: [arquivo],
+        title: 'Carteira do Corretor — Academia Tegra',
+        text: `Carteira do Corretor de ${dados.nome}`,
+      });
+    } catch (err) {
+      // AbortError acontece quando o usuário fecha o menu de compartilhamento sem escolher
+      // nada — não é um erro de verdade, então não mostramos mensagem nesse caso.
+      if (err?.name !== 'AbortError') setErro('Não foi possível abrir o menu de compartilhamento.');
+    } finally {
+      setGerandoImagem(false);
+    }
+  }
 
   async function selecionarFoto(e) {
     const arquivo = e.target.files?.[0];
@@ -34,7 +92,8 @@ export default function CarteirinhaCorretor({ dados, podeEditarFoto, aoAtualizar
   }
 
   return (
-    <div className="carteirinha">
+    <div>
+      <div className="carteirinha" ref={carteirinhaRef}>
       <div className="carteirinha-topo">
         <span className="carteirinha-titulo">ACADEMIA TEGRA</span>
         <span className="carteirinha-subtitulo">Carteira do Corretor</span>
@@ -79,8 +138,6 @@ export default function CarteirinhaCorretor({ dados, podeEditarFoto, aoAtualizar
         </div>
       </div>
 
-      {erro && <p className="erro">{erro}</p>}
-
       <div className="carteirinha-produtos">
         {(dados.carteirinhaProdutos || []).map((item) => (
           <div key={item.produto.id} className="carteirinha-produto-item">
@@ -108,6 +165,22 @@ export default function CarteirinhaCorretor({ dados, podeEditarFoto, aoAtualizar
         ))}
         {(dados.carteirinhaProdutos || []).length === 0 && (
           <span style={{ fontSize: 13, color: '#888' }}>Nenhum produto ativo cadastrado.</span>
+        )}
+      </div>
+
+      <p className="carteirinha-rodape">*Corretor associado</p>
+      </div>
+
+      {erro && <p className="erro">{erro}</p>}
+
+      <div style={{ display: 'flex', gap: 10, marginTop: 12, flexWrap: 'wrap' }}>
+        <button type="button" className="btn btn-secundario" onClick={baixarComoImagem} disabled={gerandoImagem}>
+          {gerandoImagem ? 'Gerando...' : 'Baixar como imagem'}
+        </button>
+        {suportaCompartilharArquivo && (
+          <button type="button" className="btn" onClick={compartilharImagem} disabled={gerandoImagem}>
+            {gerandoImagem ? 'Gerando...' : 'Compartilhar'}
+          </button>
         )}
       </div>
 

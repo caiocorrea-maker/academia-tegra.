@@ -239,6 +239,7 @@ th { font-size: 12px; text-transform: uppercase; color: #888; }
 .carteirinha-produto-item { display: flex; flex-direction: column; gap: 4px; }
 .carteirinha-produto-nome { font-size: 13px; font-weight: 600; }
 .carteirinha-insignias { display: flex; gap: 4px; flex-wrap: wrap; }
+.carteirinha-rodape { font-size: 9px; color: rgba(255,255,255,0.55); text-align: right; margin: 4px 2px 0; }
 
 @media (max-width: 480px) {
   .carteirinha { max-width: 100%; }

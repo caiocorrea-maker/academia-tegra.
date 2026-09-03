@@ -257,6 +257,7 @@ export default function Dashboard() {
                   <th style={{ padding: '8px 6px' }}>Produto</th>
                   <th style={{ padding: '8px 6px' }}>Treinamentos realizados</th>
                   <th style={{ padding: '8px 6px' }}>Presentes</th>
+                  <th style={{ padding: '8px 6px' }}>Nota média</th>
                   <th style={{ padding: '8px 6px' }}>Aptos a tirar plantão</th>
                 </tr>
               </thead>
@@ -276,11 +277,12 @@ export default function Dashboard() {
                         </td>
                         <td style={{ padding: '8px 6px' }}>{linha.treinamentosRealizados}</td>
                         <td style={{ padding: '8px 6px' }}>{linha.presentes}</td>
+                        <td style={{ padding: '8px 6px' }}>{linha.notaMedia != null ? `${linha.notaMedia.toFixed(0)}%` : '-'}</td>
                         <td style={{ padding: '8px 6px' }}>{linha.aptos}</td>
                       </tr>
                       {expandido && linha.porEmpresa.length === 0 && (
                         <tr key={`${linha.produtoId}-vazio`} style={{ background: '#f8f9fc' }}>
-                          <td colSpan={4} style={{ padding: '6px 6px 6px 34px', fontSize: 13, color: '#888' }}>
+                          <td colSpan={5} style={{ padding: '6px 6px 6px 34px', fontSize: 13, color: '#888' }}>
                             Nenhum dado por empresa neste período.
                           </td>
                         </tr>
@@ -290,6 +292,7 @@ export default function Dashboard() {
                           <td style={{ padding: '6px 6px 6px 34px' }}>↳ {e.nome}</td>
                           <td style={{ padding: '6px' }}>-</td>
                           <td style={{ padding: '6px' }}>{e.presentes}</td>
+                          <td style={{ padding: '6px' }}>-</td>
                           <td style={{ padding: '6px' }}>{e.aptos}</td>
                         </tr>
                       ))}
@@ -297,7 +300,7 @@ export default function Dashboard() {
                   );
                 })}
                 {tabela.length === 0 && (
-                  <tr><td colSpan={4} style={{ padding: 12, color: '#888' }}>Nenhum produto ativo.</td></tr>
+                  <tr><td colSpan={5} style={{ padding: 12, color: '#888' }}>Nenhum produto ativo.</td></tr>
                 )}
               </tbody>
             </table>
