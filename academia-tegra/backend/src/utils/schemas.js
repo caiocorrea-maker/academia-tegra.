@@ -128,6 +128,14 @@ const redefinirSenhaSchema = z.object({
   novaSenha: z.string().min(6),
 });
 
+const avaliacaoNpsSchema = z.object({
+  notaMaterial: z.number().int().min(0).max(10),
+  notaSupervisor: z.number().int().min(0).max(10),
+  notaSatisfacao: z.number().int().min(0).max(10),
+  pontosPositivos: z.string().optional().nullable(),
+  pontosMelhorar: z.string().optional().nullable(),
+});
+
 module.exports = {
   loginSchema,
   criarUsuarioInternoSchema,
@@ -145,4 +153,5 @@ module.exports = {
   redefinirSenhaSchema,
   materialBibliotecaSchema,
   editarMaterialBibliotecaSchema,
+  avaliacaoNpsSchema,
 };

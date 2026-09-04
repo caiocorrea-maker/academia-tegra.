@@ -21,6 +21,7 @@ const cronRoutes = require('./routes/cronRoutes');
 const bibliotecaRoutes = require('./routes/bibliotecaRoutes');
 const dashboardRoutes = require('./routes/dashboardRoutes');
 const temaOficialRoutes = require('./routes/temaOficialRoutes');
+const npsRoutes = require('./routes/npsRoutes');
 
 const app = express();
 
@@ -51,6 +52,7 @@ app.use('/api/cron', cronRoutes);
 app.use('/api/biblioteca', bibliotecaRoutes);
 app.use('/api/dashboard', dashboardRoutes);
 app.use('/api/temas-oficiais', temaOficialRoutes);
+app.use('/api/nps', npsRoutes);
 
 app.use((req, res) => res.status(404).json({ erro: 'Rota não encontrada.' }));
 app.use(errorHandler);

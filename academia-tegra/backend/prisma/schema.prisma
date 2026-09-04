@@ -44,6 +44,7 @@ model Usuario {
   certificados         Certificado[]
   resetTokens          PasswordResetToken[]
   materiaisCriados     MaterialBiblioteca[]
+  avaliacoesNps        AvaliacaoNps[]
 
   @@index([perfil])
   @@index([empresaId])
@@ -169,6 +170,7 @@ model Treinamento {
   presencas         Presenca[]
   tentativasProva   TentativaProva[]
   certificados      Certificado[]
+  avaliacoesNps     AvaliacaoNps[]
 
   @@index([produtoId])
   @@index([supervisorId])
@@ -328,4 +330,26 @@ model MaterialBiblioteca {
   atualizadoEm       DateTime @updatedAt
 
   @@index([produtoId])
+}
+
+// Avaliação NPS respondida pelo corretor logo após concluir um treinamento (presença
+// confirmada, se não tiver prova; ou aprovado na prova, se tiver). Uma resposta por
+// (treinamento + corretor) — não pode ser reenviada depois de enviada.
+model AvaliacaoNps {
+  id              String      @id @default(uuid())
+  treinamentoId   String
+  treinamento     Treinamento @relation(fields: [treinamentoId], references: [id], onDelete: Cascade)
+  corretorId      String
+  corretor        Usuario     @relation(fields: [corretorId], references: [id], onDelete: Cascade)
+
+  notaMaterial    Int         // 0-10: qualidade do material do treinamento
+  notaSupervisor  Int         // 0-10: abordagem do supervisor durante o treinamento
+  notaSatisfacao  Int         // 0-10: satisfação geral com o treinamento
+  pontosPositivos String?     @db.Text
+  pontosMelhorar  String?     @db.Text
+
+  criadoEm        DateTime    @default(now())
+
+  @@unique([treinamentoId, corretorId])
+  @@index([treinamentoId])
 }

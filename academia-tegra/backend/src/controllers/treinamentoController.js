@@ -140,12 +140,20 @@ async function detalhar(req, res) {
   const presencaIds = new Set(treinamento.presencas.map((p) => p.corretorId));
   const tentativasMap = new Map(treinamento.tentativasProva.map((t) => [t.corretorId, t]));
 
-  let meuInteresse, minhaPresencaConfirmada, minhaTentativa, interessados;
+  let meuInteresse, minhaPresencaConfirmada, minhaTentativa, interessados, elegivelParaNps, jaAvaliouNps;
 
   if (req.usuario.perfil === 'CORRETOR') {
     meuInteresse = treinamento.interesses.some((i) => i.corretor.id === req.usuario.id);
     minhaPresencaConfirmada = presencaIds.has(req.usuario.id);
     minhaTentativa = tentativasMap.get(req.usuario.id) || null;
+
+    // Elegível para avaliação NPS: presença confirmada (se não tiver prova) ou aprovado na
+    // prova (se tiver) — mesma regra do npsController.
+    elegivelParaNps = treinamento.temProva ? minhaTentativa?.aprovado === true : minhaPresencaConfirmada;
+    const avaliacao = await prisma.avaliacaoNps.findUnique({
+      where: { treinamentoId_corretorId: { treinamentoId: id, corretorId: req.usuario.id } },
+    });
+    jaAvaliouNps = Boolean(avaliacao);
   } else {
     // Admin/Supervisor: lista de interessados com status de presença e prova, para
     // confirmar presença manualmente e acompanhar o resultado da prova.
@@ -181,6 +189,8 @@ async function detalhar(req, res) {
     minhaPresencaConfirmada,
     minhaTentativa,
     interessados,
+    elegivelParaNps,
+    jaAvaliouNps,
   });
 }
 
