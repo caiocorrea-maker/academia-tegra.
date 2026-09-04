@@ -15,6 +15,7 @@ import Produto from './pages/Produto';
 import ResponderProva from './pages/ResponderProva';
 import Biblioteca from './pages/Biblioteca';
 import Dashboard from './pages/Dashboard';
+import Avaliacoes from './pages/Avaliacoes';
 
 export default function App() {
   return (
@@ -47,6 +48,8 @@ export default function App() {
       } />
 
       <Route path="/dashboard" element={<RotaProtegida perfis={['ADMIN', 'SUPERVISOR']}><Dashboard /></RotaProtegida>} />
+
+      <Route path="/avaliacoes" element={<RotaProtegida perfis={['ADMIN', 'SUPERVISOR']}><Avaliacoes /></RotaProtegida>} />
 
       <Route path="/admin" element={<RotaProtegida perfis={['ADMIN']}><PainelAdmin /></RotaProtegida>} />
 

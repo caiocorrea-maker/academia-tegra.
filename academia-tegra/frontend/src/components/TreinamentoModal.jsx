@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import api from '../services/api';
 import FormularioTreinamento from './FormularioTreinamento';
+import AvaliacaoNpsModal from './AvaliacaoNpsModal';
 
 export default function TreinamentoModal({ treinamentoId, aoFechar, aoAtualizar }) {
   const { usuario } = useAuth();
@@ -14,6 +15,7 @@ export default function TreinamentoModal({ treinamentoId, aoFechar, aoAtualizar 
   const [excluindo, setExcluindo] = useState(false);
   const [liberando, setLiberando] = useState(false);
   const [alterandoPresenca, setAlterandoPresenca] = useState('');
+  const [mostrarNps, setMostrarNps] = useState(false);
 
   async function carregar() {
     setCarregando(true);
@@ -195,6 +197,13 @@ export default function TreinamentoModal({ treinamentoId, aoFechar, aoAtualizar 
               </div>
             )}
 
+            {usuario.perfil === 'CORRETOR' && dados.elegivelParaNps && !dados.jaAvaliouNps && (
+              <div className="card" style={{ marginTop: 12, background: '#f8f9fc' }}>
+                <p style={{ margin: '0 0 8px', fontSize: 14 }}>Como foi esse treinamento pra você? Sua avaliação ajuda a melhorar os próximos.</p>
+                <button className="btn" onClick={() => setMostrarNps(true)}>Avaliar treinamento</button>
+              </div>
+            )}
+
             {podeGerenciar && (
               <div style={{ display: 'flex', gap: 8, marginBottom: 4 }}>
                 <button className="btn btn-secundario" onClick={abrirEdicao}>Editar</button>
@@ -280,6 +289,14 @@ export default function TreinamentoModal({ treinamentoId, aoFechar, aoAtualizar 
           </>
         )}
       </div>
+
+      {mostrarNps && dados && (
+        <AvaliacaoNpsModal
+          treinamento={dados}
+          aoFechar={() => setMostrarNps(false)}
+          aoEnviar={() => { setMostrarNps(false); carregar(); }}
+        />
+      )}
     </div>
   );
 }

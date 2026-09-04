@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import Layout from '../components/Layout';
 import TreinamentoModal from '../components/TreinamentoModal';
 import FormularioTreinamento from '../components/FormularioTreinamento';
+import AvaliacaoNpsModal from '../components/AvaliacaoNpsModal';
 import { useAuth } from '../context/AuthContext';
 import api from '../services/api';
 
@@ -22,6 +23,7 @@ export default function Agenda() {
   const [dataParaCriar, setDataParaCriar] = useState(null);
   const [produtoFiltroId, setProdutoFiltroId] = useState('');
   const [apenasMeusTreinamentos, setApenasMeusTreinamentos] = useState(false);
+  const [filaNps, setFilaNps] = useState([]); // treinamentos pendentes de avaliação (CORRETOR)
 
   const podeGerenciar = usuario.perfil === 'ADMIN' || usuario.perfil === 'SUPERVISOR';
   const ehCorretor = usuario.perfil === 'CORRETOR';
@@ -42,6 +44,13 @@ export default function Agenda() {
   useEffect(() => {
     api.get('/produtos').then((res) => setProdutos(res.data));
   }, []);
+
+  // Avaliação NPS: ao abrir a Agenda, o corretor é avisado dos treinamentos que já pode
+  // avaliar (presença confirmada, ou aprovado na prova) e ainda não avaliou.
+  useEffect(() => {
+    if (!ehCorretor) return;
+    api.get('/nps/pendentes').then((res) => setFilaNps(res.data));
+  }, [ehCorretor]);
 
   const eventosFiltrados = useMemo(() => {
     return eventos.filter((e) => {
@@ -182,6 +191,14 @@ export default function Agenda() {
             setDataParaCriar(null);
             carregarEventos();
           }}
+        />
+      )}
+
+      {filaNps.length > 0 && (
+        <AvaliacaoNpsModal
+          treinamento={filaNps[0]}
+          aoFechar={() => setFilaNps((fila) => fila.slice(1))}
+          aoEnviar={() => setFilaNps((fila) => fila.slice(1))}
         />
       )}
     </Layout>
