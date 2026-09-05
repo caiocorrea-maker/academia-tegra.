@@ -368,6 +368,7 @@ function FormularioTemaOficial({ produtoId, posicao, temaExistente, aoFechar, ao
         {mostrarNovaProva && (
           <FormularioProva
             produtoId={produtoId}
+            nomeSugerido={nome}
             aoCriar={provaCriada}
             aoFechar={() => setMostrarNovaProva(false)}
           />

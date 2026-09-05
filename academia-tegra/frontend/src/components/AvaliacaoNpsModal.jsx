@@ -38,6 +38,7 @@ export default function AvaliacaoNpsModal({ treinamento, aoFechar, aoEnviar }) {
   const [pontosMelhorar, setPontosMelhorar] = useState('');
   const [erro, setErro] = useState('');
   const [enviando, setEnviando] = useState(false);
+  const [adiando, setAdiando] = useState(false);
 
   const completo = notaMaterial !== null && notaSupervisor !== null && notaSatisfacao !== null;
 
@@ -60,13 +61,26 @@ export default function AvaliacaoNpsModal({ treinamento, aoFechar, aoEnviar }) {
     }
   }
 
+  // "Responder depois" conta como um adiamento — na segunda vez, esse treinamento para de
+  // aparecer sozinho pra esse corretor (mas continua acessível pelo link do e-mail).
+  async function responderDepois() {
+    setAdiando(true);
+    try {
+      await api.post(`/nps/${treinamento.id}/adiar`);
+    } catch {
+      // melhor esforço — mesmo se falhar, deixa o corretor fechar o modal normalmente
+    } finally {
+      setAdiando(false);
+      aoFechar?.();
+    }
+  }
+
   return (
     <div className="modal-fundo">
       <div className="modal-caixa" style={{ maxWidth: 520 }} onClick={(e) => e.stopPropagation()}>
-        <h3 style={{ marginBottom: 2 }}>Como foi o treinamento?</h3>
-        <p style={{ fontSize: 13, color: '#888', marginTop: 0 }}>
-          {treinamento.produto?.nome} — {treinamento.tema}
-        </p>
+        <p style={{ fontSize: 14, color: '#888', margin: '0 0 2px' }}>Como foi seu treinamento?</p>
+        <p style={{ fontSize: 13, color: '#888', margin: '0 0 4px' }}>{treinamento.produto?.nome}</p>
+        <h2 style={{ margin: '0 0 16px', fontSize: 22 }}>{treinamento.tema}</h2>
 
         <form onSubmit={enviar}>
           <div className="campo">
@@ -94,8 +108,8 @@ export default function AvaliacaoNpsModal({ treinamento, aoFechar, aoEnviar }) {
 
           <div style={{ display: 'flex', gap: 8 }}>
             <button className="btn" type="submit" disabled={enviando}>{enviando ? 'Enviando...' : 'Enviar avaliação'}</button>
-            <button className="btn btn-secundario" type="button" onClick={aoFechar} disabled={enviando}>
-              Responder depois
+            <button className="btn btn-secundario" type="button" onClick={responderDepois} disabled={enviando || adiando}>
+              {adiando ? '...' : 'Responder depois'}
             </button>
           </div>
         </form>

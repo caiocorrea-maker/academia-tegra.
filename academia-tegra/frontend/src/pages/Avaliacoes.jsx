@@ -63,6 +63,7 @@ export default function Avaliacoes() {
   const [produtoId, setProdutoId] = useState('');
   const [carregando, setCarregando] = useState(true);
   const [selecionado, setSelecionado] = useState(null);
+  const [exportando, setExportando] = useState(false);
 
   useEffect(() => { api.get('/produtos').then((res) => setProdutos(res.data)); }, []);
 
@@ -76,10 +77,30 @@ export default function Avaliacoes() {
 
   useEffect(() => { carregar(); }, [produtoId]);
 
+  async function exportar() {
+    setExportando(true);
+    try {
+      const params = produtoId ? { produtoId } : {};
+      const res = await api.get('/exportar/avaliacoes-nps', { params, responseType: 'blob' });
+      const url = window.URL.createObjectURL(new Blob([res.data]));
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = 'avaliacoes_nps_academia_tegra.xlsx';
+      link.click();
+    } catch (err) {
+      alert('Não foi possível gerar a extração de avaliações.');
+    } finally {
+      setExportando(false);
+    }
+  }
+
   return (
     <Layout>
       <div className="topo-pagina">
         <h2 style={{ margin: 0 }}>Avaliações (NPS)</h2>
+        <button className="btn btn-secundario" onClick={exportar} disabled={exportando}>
+          {exportando ? 'Gerando...' : 'Extração Excel'}
+        </button>
       </div>
 
       <p style={{ fontSize: 13, color: '#888', marginTop: -10, marginBottom: 14 }}>

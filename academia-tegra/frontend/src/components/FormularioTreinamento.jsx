@@ -267,6 +267,7 @@ export default function FormularioTreinamento({ produtos, treinamentoExistente, 
         {mostrarFormProva && (
           <FormularioProva
             produtoId={produtoId}
+            nomeSugerido={tema}
             aoFechar={() => setMostrarFormProva(false)}
             aoCriar={(prova) => {
               setProvasDisponiveis((ps) => [...ps, prova]);

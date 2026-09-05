@@ -21,8 +21,8 @@ function minimoAcertos(totalQuestoes) {
   return Math.round(totalQuestoes * 0.7);
 }
 
-export default function FormularioProva({ produtoId, aoCriar, aoFechar }) {
-  const [titulo, setTitulo] = useState('');
+export default function FormularioProva({ produtoId, nomeSugerido, aoCriar, aoFechar }) {
+  const [titulo, setTitulo] = useState(nomeSugerido || '');
   const [questoes, setQuestoes] = useState(Array.from({ length: MIN_QUESTOES }, questaoVazia));
   const [erro, setErro] = useState('');
   const [salvando, setSalvando] = useState(false);

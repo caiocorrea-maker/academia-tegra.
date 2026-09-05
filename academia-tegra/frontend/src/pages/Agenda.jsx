@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import Layout from '../components/Layout';
 import TreinamentoModal from '../components/TreinamentoModal';
 import FormularioTreinamento from '../components/FormularioTreinamento';
@@ -24,6 +25,7 @@ export default function Agenda() {
   const [produtoFiltroId, setProdutoFiltroId] = useState('');
   const [apenasMeusTreinamentos, setApenasMeusTreinamentos] = useState(false);
   const [filaNps, setFilaNps] = useState([]); // treinamentos pendentes de avaliação (CORRETOR)
+  const [searchParams, setSearchParams] = useSearchParams();
 
   const podeGerenciar = usuario.perfil === 'ADMIN' || usuario.perfil === 'SUPERVISOR';
   const ehCorretor = usuario.perfil === 'CORRETOR';
@@ -46,11 +48,25 @@ export default function Agenda() {
   }, []);
 
   // Avaliação NPS: ao abrir a Agenda, o corretor é avisado dos treinamentos que já pode
-  // avaliar (presença confirmada, ou aprovado na prova) e ainda não avaliou.
+  // avaliar (presença confirmada, ou prova concluída) e ainda não avaliou.
   useEffect(() => {
     if (!ehCorretor) return;
     api.get('/nps/pendentes').then((res) => setFilaNps(res.data));
   }, [ehCorretor]);
+
+  // Link do convite por e-mail (?avaliar=treinamentoId): traz esse treinamento pra frente da
+  // fila mesmo que já tenha sido adiado 2x na lista automática, já que o corretor pediu
+  // explicitamente clicando no link.
+  useEffect(() => {
+    const avaliarId = searchParams.get('avaliar');
+    if (!avaliarId || !ehCorretor) return;
+    api.get(`/nps/link/${avaliarId}`).then((res) => {
+      if (res.data) setFilaNps((fila) => [res.data, ...fila.filter((f) => f.id !== res.data.id)]);
+      const novosParams = new URLSearchParams(searchParams);
+      novosParams.delete('avaliar');
+      setSearchParams(novosParams, { replace: true });
+    });
+  }, [searchParams, ehCorretor]);
 
   const eventosFiltrados = useMemo(() => {
     return eventos.filter((e) => {

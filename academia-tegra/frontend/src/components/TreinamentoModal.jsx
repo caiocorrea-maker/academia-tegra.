@@ -16,6 +16,8 @@ export default function TreinamentoModal({ treinamentoId, aoFechar, aoAtualizar 
   const [liberando, setLiberando] = useState(false);
   const [alterandoPresenca, setAlterandoPresenca] = useState('');
   const [mostrarNps, setMostrarNps] = useState(false);
+  const [selecionados, setSelecionados] = useState([]);
+  const [confirmandoLote, setConfirmandoLote] = useState(false);
 
   async function carregar() {
     setCarregando(true);
@@ -78,6 +80,28 @@ export default function TreinamentoModal({ treinamentoId, aoFechar, aoAtualizar 
       setErro(err.response?.data?.erro || 'Não foi possível atualizar a presença.');
     } finally {
       setAlterandoPresenca('');
+    }
+  }
+
+  // Lista de quem ainda pode receber presença (não confirmado e dentro do prazo) — usada
+  // pela seleção múltipla e pelo "Selecionar todos".
+  const pendentes = (dados?.interessados || []).filter((c) => !c.presencaConfirmada && !diaTreinamentoJaPassou);
+
+  function alternarSelecao(corretorId) {
+    setSelecionados((sel) => (sel.includes(corretorId) ? sel.filter((id) => id !== corretorId) : [...sel, corretorId]));
+  }
+
+  async function confirmarSelecionados() {
+    setErro('');
+    setConfirmandoLote(true);
+    try {
+      await api.put(`/treinamentos/${treinamentoId}/presencas`, { corretorIds: selecionados });
+      setSelecionados([]);
+      await carregar();
+    } catch (err) {
+      setErro(err.response?.data?.erro || 'Não foi possível confirmar a presença dos selecionados.');
+    } finally {
+      setConfirmandoLote(false);
     }
   }
 
@@ -234,18 +258,46 @@ export default function TreinamentoModal({ treinamentoId, aoFechar, aoAtualizar 
               <div style={{ marginTop: 20, borderTop: '1px solid #eee', paddingTop: 16 }}>
                 <strong>Lista de interessados</strong>
                 <p style={{ fontSize: 12, color: '#888', marginTop: 4 }}>
-                  Confirme manualmente a presença de cada corretor que efetivamente compareceu.
+                  Confirme manualmente a presença de cada corretor que efetivamente compareceu — ou selecione vários e confirme de uma vez.
                 </p>
+
+                {pendentes.length > 0 && (
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', margin: '8px 0' }}>
+                    <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, cursor: 'pointer' }}>
+                      <input
+                        type="checkbox"
+                        checked={selecionados.length === pendentes.length}
+                        onChange={(e) => setSelecionados(e.target.checked ? pendentes.map((c) => c.id) : [])}
+                      />
+                      Selecionar todos
+                    </label>
+                    {selecionados.length > 0 && (
+                      <button className="btn" style={{ padding: '4px 10px', fontSize: 12 }} onClick={confirmarSelecionados} disabled={confirmandoLote}>
+                        {confirmandoLote ? 'Confirmando...' : `Confirmar presença (${selecionados.length})`}
+                      </button>
+                    )}
+                  </div>
+                )}
+
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginTop: 8 }}>
                   {(dados.interessados || []).map((c) => (
                     <div key={c.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', border: '1px solid #eee', borderRadius: 8, padding: '6px 10px' }}>
-                      <div>
-                        <span>{c.nome}</span>
-                        {dados.temProva && c.tentativa?.status === 'CONCLUIDA' && (
-                          <span style={{ marginLeft: 8, fontSize: 12, color: c.tentativa.aprovado ? '#16a34a' : '#dc2626' }}>
-                            {c.tentativa.aprovado ? 'Aprovado' : 'Reprovado'} ({c.tentativa.percentual.toFixed(0)}%)
-                          </span>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                        {!c.presencaConfirmada && !diaTreinamentoJaPassou && (
+                          <input
+                            type="checkbox"
+                            checked={selecionados.includes(c.id)}
+                            onChange={() => alternarSelecao(c.id)}
+                          />
                         )}
+                        <div>
+                          <span>{c.nome}</span>
+                          {dados.temProva && c.tentativa?.status === 'CONCLUIDA' && (
+                            <span style={{ marginLeft: 8, fontSize: 12, color: c.tentativa.aprovado ? '#16a34a' : '#dc2626' }}>
+                              {c.tentativa.aprovado ? 'Aprovado' : 'Reprovado'} ({c.tentativa.percentual.toFixed(0)}%)
+                            </span>
+                          )}
+                        </div>
                       </div>
                       <button
                         className={`btn ${c.presencaConfirmada ? 'btn-secundario' : ''}`}
