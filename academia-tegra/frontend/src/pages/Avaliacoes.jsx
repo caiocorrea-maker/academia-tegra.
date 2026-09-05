@@ -97,9 +97,9 @@ export default function Avaliacoes() {
   return (
     <Layout>
       <div className="topo-pagina">
-        <h2 style={{ margin: 0 }}>Avaliações (NPS)</h2>
+        <h2 style={{ margin: 0 }}>Pesquisa de Satisfação</h2>
         <button className="btn btn-secundario" onClick={exportar} disabled={exportando}>
-          {exportando ? 'Gerando...' : 'Extração Excel'}
+          {exportando ? 'Gerando...' : 'NPS Resumo'}
         </button>
       </div>
 

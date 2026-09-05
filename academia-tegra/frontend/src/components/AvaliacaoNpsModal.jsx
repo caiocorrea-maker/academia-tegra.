@@ -78,9 +78,10 @@ export default function AvaliacaoNpsModal({ treinamento, aoFechar, aoEnviar }) {
   return (
     <div className="modal-fundo">
       <div className="modal-caixa" style={{ maxWidth: 520 }} onClick={(e) => e.stopPropagation()}>
-        <p style={{ fontSize: 14, color: '#888', margin: '0 0 2px' }}>Como foi seu treinamento?</p>
-        <p style={{ fontSize: 13, color: '#888', margin: '0 0 4px' }}>{treinamento.produto?.nome}</p>
-        <h2 style={{ margin: '0 0 16px', fontSize: 22 }}>{treinamento.tema}</h2>
+        <h3 style={{ marginBottom: 2 }}>Como foi seu treinamento?</h3>
+        <p style={{ fontSize: 13, color: '#888', marginTop: 0 }}>
+          {treinamento.produto?.nome} - {treinamento.tema}
+        </p>
 
         <form onSubmit={enviar}>
           <div className="campo">
