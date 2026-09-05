@@ -45,6 +45,7 @@ model Usuario {
   resetTokens          PasswordResetToken[]
   materiaisCriados     MaterialBiblioteca[]
   avaliacoesNps        AvaliacaoNps[]
+  adiamentosNps        AvaliacaoNpsAdiamento[]
 
   @@index([perfil])
   @@index([empresaId])
@@ -171,6 +172,7 @@ model Treinamento {
   tentativasProva   TentativaProva[]
   certificados      Certificado[]
   avaliacoesNps     AvaliacaoNps[]
+  adiamentosNps     AvaliacaoNpsAdiamento[]
 
   @@index([produtoId])
   @@index([supervisorId])
@@ -352,4 +354,19 @@ model AvaliacaoNps {
 
   @@unique([treinamentoId, corretorId])
   @@index([treinamentoId])
+}
+
+// Conta quantas vezes o corretor clicou em "Responder depois" para um treinamento. Ao
+// chegar em 2, esse treinamento para de aparecer na lista de pendentes dele (mas continua
+// disponível se ele acessar o link do convite por e-mail diretamente).
+model AvaliacaoNpsAdiamento {
+  id            String      @id @default(uuid())
+  treinamentoId String
+  treinamento   Treinamento @relation(fields: [treinamentoId], references: [id], onDelete: Cascade)
+  corretorId    String
+  corretor      Usuario     @relation(fields: [corretorId], references: [id], onDelete: Cascade)
+  vezes         Int         @default(1)
+  atualizadoEm  DateTime    @updatedAt
+
+  @@unique([treinamentoId, corretorId])
 }

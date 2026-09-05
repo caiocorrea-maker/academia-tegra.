@@ -3,9 +3,9 @@ const { avaliacaoNpsSchema } = require('../utils/schemas');
 const { HttpError } = require('../middleware/errorHandler');
 
 // Um treinamento fica "elegível para avaliação" pelo corretor assim que ele conclui a parte
-// que encerra o treinamento pra ele: presença confirmada (se não tiver prova), ou aprovado
-// na prova (se tiver). Treinamento reprovado na prova NÃO libera a avaliação ainda — só
-// libera quando ele for aprovado (a essa altura pode já ter feito uma nova tentativa).
+// que encerra o treinamento pra ele: presença confirmada (se não tiver prova), ou a prova
+// concluída (se tiver) — aprovado OU reprovado, os dois liberam a avaliação, já que a
+// experiência do treinamento em si já terminou pra ele.
 async function elegivelParaAvaliar(treinamentoId, corretorId) {
   const treinamento = await prisma.treinamento.findUnique({
     where: { id: treinamentoId },
@@ -14,10 +14,10 @@ async function elegivelParaAvaliar(treinamentoId, corretorId) {
   if (!treinamento) return false;
 
   if (treinamento.temProva) {
-    const aprovado = await prisma.tentativaProva.findFirst({
-      where: { treinamentoId, corretorId, status: 'CONCLUIDA', aprovado: true },
+    const concluida = await prisma.tentativaProva.findFirst({
+      where: { treinamentoId, corretorId, status: 'CONCLUIDA' },
     });
-    return Boolean(aprovado);
+    return Boolean(concluida);
   }
 
   const presenca = await prisma.presenca.findUnique({
@@ -27,25 +27,28 @@ async function elegivelParaAvaliar(treinamentoId, corretorId) {
 }
 
 // Lista os treinamentos que o corretor logado já pode avaliar e ainda não avaliou — usada
-// pra disparar o formulário de NPS automaticamente (ex: ao abrir a Agenda).
+// pra disparar o formulário de NPS automaticamente (ex: ao abrir a Agenda). Treinamentos já
+// adiados 2 vezes ("responder depois") saem dessa lista (mas continuam acessíveis pelo link
+// do convite por e-mail, em consultarPorLink).
 async function listarPendentes(req, res) {
   const corretorId = req.usuario.id;
 
-  const [presencasSemProva, tentativasAprovadas, jaAvaliados] = await Promise.all([
+  const [presencasSemProva, tentativasConcluidas, jaAvaliados, adiados2x] = await Promise.all([
     prisma.presenca.findMany({
       where: { corretorId, treinamento: { temProva: false } },
       select: { treinamentoId: true },
     }),
     prisma.tentativaProva.findMany({
-      where: { corretorId, status: 'CONCLUIDA', aprovado: true, treinamento: { temProva: true } },
+      where: { corretorId, status: 'CONCLUIDA', treinamento: { temProva: true } },
       select: { treinamentoId: true },
     }),
     prisma.avaliacaoNps.findMany({ where: { corretorId }, select: { treinamentoId: true } }),
+    prisma.avaliacaoNpsAdiamento.findMany({ where: { corretorId, vezes: { gte: 2 } }, select: { treinamentoId: true } }),
   ]);
 
-  const jaAvaliadosSet = new Set(jaAvaliados.map((a) => a.treinamentoId));
-  const elegiveisIds = [...new Set([...presencasSemProva, ...tentativasAprovadas].map((x) => x.treinamentoId))].filter(
-    (id) => !jaAvaliadosSet.has(id)
+  const excluirSet = new Set([...jaAvaliados, ...adiados2x].map((a) => a.treinamentoId));
+  const elegiveisIds = [...new Set([...presencasSemProva, ...tentativasConcluidas].map((x) => x.treinamentoId))].filter(
+    (id) => !excluirSet.has(id)
   );
 
   if (elegiveisIds.length === 0) return res.json([]);
@@ -199,4 +202,41 @@ async function listarResumo(req, res) {
   );
 }
 
-module.exports = { listarPendentes, enviar, listarPorTreinamento, listarResumo };
+// Registra um "responder depois" (soma 1 na contagem de adiamentos daquele corretor para
+// aquele treinamento). Ao chegar em 2, some da lista de pendentes automática.
+async function adiar(req, res) {
+  const { treinamentoId } = req.params;
+  const corretorId = req.usuario.id;
+
+  const adiamento = await prisma.avaliacaoNpsAdiamento.upsert({
+    where: { treinamentoId_corretorId: { treinamentoId, corretorId } },
+    update: { vezes: { increment: 1 } },
+    create: { treinamentoId, corretorId, vezes: 1 },
+  });
+
+  res.json({ vezes: adiamento.vezes });
+}
+
+// Usado pelo link do convite por e-mail: traz o treinamento pra avaliação mesmo que ele já
+// tenha sido adiado 2 vezes na lista automática (o corretor pediu explicitamente, clicando
+// no link do e-mail).
+async function consultarPorLink(req, res) {
+  const { treinamentoId } = req.params;
+  const corretorId = req.usuario.id;
+
+  const jaAvaliou = await prisma.avaliacaoNps.findUnique({
+    where: { treinamentoId_corretorId: { treinamentoId, corretorId } },
+  });
+  if (jaAvaliou) return res.json(null);
+
+  const elegivel = await elegivelParaAvaliar(treinamentoId, corretorId);
+  if (!elegivel) return res.json(null);
+
+  const treinamento = await prisma.treinamento.findUnique({
+    where: { id: treinamentoId },
+    select: { id: true, tema: true, data: true, produto: { select: { nome: true, corCalendario: true } } },
+  });
+  res.json(treinamento);
+}
+
+module.exports = { listarPendentes, enviar, adiar, consultarPorLink, listarPorTreinamento, listarResumo };

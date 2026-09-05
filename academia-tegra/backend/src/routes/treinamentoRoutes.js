@@ -33,5 +33,6 @@ router.post('/:id/liberar', permitir('ADMIN', 'SUPERVISOR'), treinamentoControll
 
 // Confirmação manual de presença (Admin/Supervisor), a partir da lista de interessados
 router.put('/:id/presencas/:corretorId', permitir('ADMIN', 'SUPERVISOR'), treinamentoController.definirPresenca);
+router.put('/:id/presencas', permitir('ADMIN', 'SUPERVISOR'), treinamentoController.definirPresencasEmLote);
 
 module.exports = router;

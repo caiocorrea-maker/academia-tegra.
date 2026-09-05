@@ -4,6 +4,7 @@ const { treinamentoSchema } = require('../utils/schemas');
 const { HttpError } = require('../middleware/errorHandler');
 const { uploadBuffer, getFileUrl } = require('../config/s3');
 const { ancorarData, montarDataHora, diaJaPassou } = require('../utils/datas');
+const { enviarEmailConviteNps } = require('../config/mailer');
 
 // ---- Helpers ----
 
@@ -147,9 +148,9 @@ async function detalhar(req, res) {
     minhaPresencaConfirmada = presencaIds.has(req.usuario.id);
     minhaTentativa = tentativasMap.get(req.usuario.id) || null;
 
-    // Elegível para avaliação NPS: presença confirmada (se não tiver prova) ou aprovado na
-    // prova (se tiver) — mesma regra do npsController.
-    elegivelParaNps = treinamento.temProva ? minhaTentativa?.aprovado === true : minhaPresencaConfirmada;
+    // Elegível para avaliação NPS: presença confirmada (se não tiver prova) ou prova
+    // concluída — aprovado ou reprovado (se tiver prova) — mesma regra do npsController.
+    elegivelParaNps = treinamento.temProva ? minhaTentativa?.status === 'CONCLUIDA' : minhaPresencaConfirmada;
     const avaliacao = await prisma.avaliacaoNps.findUnique({
       where: { treinamentoId_corretorId: { treinamentoId: id, corretorId: req.usuario.id } },
     });
@@ -482,11 +483,40 @@ async function liberar(req, res) {
 
 // ---- Confirmação manual de presença (Admin/Supervisor, a partir da lista de interessados) ----
 
+// Convite por e-mail para responder o NPS: só faz sentido para treinamentos SEM prova — nos
+// que têm prova, o corretor já vê o convite na hora, dentro do próprio app, ao terminar a
+// prova. Melhor esforço: se o e-mail falhar (ex.: domínio do Resend ainda não verificado),
+// não deve derrubar a confirmação de presença.
+async function convidarParaNpsSeAplicavel(treinamento, corretorId) {
+  if (treinamento.temProva) return;
+  try {
+    const corretor = await prisma.usuario.findUnique({ where: { id: corretorId }, select: { nome: true, email: true } });
+    if (!corretor?.email) return;
+    const link = `${process.env.FRONTEND_URL}/agenda?avaliar=${treinamento.id}`;
+    await enviarEmailConviteNps(corretor.email, corretor.nome, { tema: treinamento.tema, produtoNome: treinamento.produto.nome }, link);
+  } catch (err) {
+    console.error('Falha ao enviar convite de avaliação NPS:', err.message);
+  }
+}
+
+// Confirma a presença de um corretor (idempotente) e, se for a primeira confirmação, dispara
+// o convite de NPS por e-mail (quando aplicável). Retorna true se criou uma presença nova.
+async function confirmarPresencaUnica(treinamento, corretorId) {
+  const jaExistia = await prisma.presenca.findUnique({
+    where: { treinamentoId_corretorId: { treinamentoId: treinamento.id, corretorId } },
+  });
+  if (jaExistia) return false;
+
+  await prisma.presenca.create({ data: { treinamentoId: treinamento.id, corretorId } });
+  await convidarParaNpsSeAplicavel(treinamento, corretorId);
+  return true;
+}
+
 async function definirPresenca(req, res) {
   const { id, corretorId } = req.params;
   const { confirmado } = req.body;
 
-  const treinamento = await prisma.treinamento.findUnique({ where: { id } });
+  const treinamento = await prisma.treinamento.findUnique({ where: { id }, include: { produto: { select: { nome: true } } } });
   if (!treinamento) throw new HttpError(404, 'Treinamento não encontrado.');
 
   if (req.usuario.perfil === 'SUPERVISOR' && treinamento.supervisorId !== req.usuario.id) {
@@ -504,16 +534,50 @@ async function definirPresenca(req, res) {
     if (diaJaPassou(treinamento.data)) {
       throw new HttpError(400, 'Não é mais possível dar presença: a data deste treinamento já passou.');
     }
-    await prisma.presenca.upsert({
-      where: { treinamentoId_corretorId: { treinamentoId: id, corretorId } },
-      update: {},
-      create: { treinamentoId: id, corretorId },
-    });
+    await confirmarPresencaUnica(treinamento, corretorId);
   } else {
     await prisma.presenca.deleteMany({ where: { treinamentoId: id, corretorId } });
   }
 
   res.json({ mensagem: confirmado ? 'Presença confirmada.' : 'Presença removida.' });
+}
+
+// Confirma a presença de vários corretores interessados de uma vez (seleção múltipla na
+// lista de interessados). Ignora silenciosamente quem já estava confirmado ou não tem
+// interesse válido — só falha se a data do treinamento já tiver passado.
+async function definirPresencasEmLote(req, res) {
+  const { id } = req.params;
+  const { corretorIds } = req.body;
+
+  if (!Array.isArray(corretorIds) || corretorIds.length === 0) {
+    throw new HttpError(400, 'Selecione ao menos um corretor.');
+  }
+
+  const treinamento = await prisma.treinamento.findUnique({ where: { id }, include: { produto: { select: { nome: true } } } });
+  if (!treinamento) throw new HttpError(404, 'Treinamento não encontrado.');
+
+  if (req.usuario.perfil === 'SUPERVISOR' && treinamento.supervisorId !== req.usuario.id) {
+    throw new HttpError(403, 'Você só pode confirmar presença em treinamentos criados por você.');
+  }
+
+  if (diaJaPassou(treinamento.data)) {
+    throw new HttpError(400, 'Não é mais possível dar presença: a data deste treinamento já passou.');
+  }
+
+  const interesses = await prisma.interesseTreinamento.findMany({
+    where: { treinamentoId: id, corretorId: { in: corretorIds }, cancelado: false },
+    select: { corretorId: true },
+  });
+  const idsValidos = new Set(interesses.map((i) => i.corretorId));
+
+  let confirmados = 0;
+  for (const corretorId of corretorIds) {
+    if (!idsValidos.has(corretorId)) continue;
+    const criou = await confirmarPresencaUnica(treinamento, corretorId);
+    if (criou) confirmados++;
+  }
+
+  res.json({ mensagem: `Presença confirmada para ${confirmados} corretor(es).` });
 }
 
 // ---- Sugestão de nome / preenchimento automático (item 1) ----
@@ -567,5 +631,6 @@ module.exports = {
   cancelarInteresse,
   liberar,
   definirPresenca,
+  definirPresencasEmLote,
   sugestoesPorProduto,
 };

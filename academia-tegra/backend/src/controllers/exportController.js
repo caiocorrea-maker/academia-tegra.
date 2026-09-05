@@ -243,4 +243,112 @@ async function exportarCorretoresAptos(req, res) {
   res.end();
 }
 
-module.exports = { exportarTreinamentos, exportarPresencas, exportarCorretoresAptos };
+// Exporta todas as respostas de NPS (uma linha por resposta). Sem produtoId, considera
+// todos os produtos (Supervisor só vê os vinculados a ele — mesma regra do
+// npsController/exportarCorretoresAptos).
+async function exportarAvaliacoesNps(req, res) {
+  const { produtoId } = req.query;
+
+  let produtoIdFiltro = produtoId ? { produtoId } : {};
+  if (req.usuario.perfil === 'SUPERVISOR') {
+    if (produtoId) {
+      const vinculo = await prisma.produtoSupervisor.findUnique({
+        where: { produtoId_supervisorId: { produtoId, supervisorId: req.usuario.id } },
+      });
+      if (!vinculo) return res.status(403).json({ erro: 'Você não tem acesso a este produto.' });
+    } else {
+      const vinculos = await prisma.produtoSupervisor.findMany({
+        where: { supervisorId: req.usuario.id },
+        select: { produtoId: true },
+      });
+      produtoIdFiltro = { produtoId: { in: vinculos.map((v) => v.produtoId) } };
+    }
+  }
+
+  const respostas = await prisma.avaliacaoNps.findMany({
+    where: { treinamento: produtoIdFiltro },
+    include: {
+      treinamento: {
+        select: {
+          tema: true,
+          data: true,
+          horario: true,
+          temProva: true,
+          produto: { select: { nome: true } },
+        },
+      },
+      corretor: {
+        select: { nome: true, gerente: true, diretor: true, empresa: { select: { nome: true } } },
+      },
+    },
+    orderBy: { criadoEm: 'desc' },
+  });
+
+  // Busca as tentativas de prova relevantes de uma vez só, pra saber "Aprovado"/"Reprovado"
+  // sem fazer uma consulta por linha.
+  const tentativas = await prisma.tentativaProva.findMany({
+    where: {
+      status: 'CONCLUIDA',
+      OR: respostas
+        .filter((r) => r.treinamento.temProva)
+        .map((r) => ({ treinamentoId: r.treinamentoId, corretorId: r.corretorId })),
+    },
+    select: { treinamentoId: true, corretorId: true, aprovado: true },
+  });
+  const aprovadoPorChave = new Map(tentativas.map((t) => [`${t.treinamentoId}-${t.corretorId}`, t.aprovado]));
+
+  const workbook = new ExcelJS.Workbook();
+  workbook.creator = 'Academia Tegra';
+  const sheet = workbook.addWorksheet('Avaliações NPS');
+
+  sheet.columns = [
+    { header: 'Produto', key: 'produto', width: 22 },
+    { header: 'Treinamento', key: 'treinamento', width: 32 },
+    { header: 'Data', key: 'data', width: 14 },
+    { header: 'Hora', key: 'hora', width: 10 },
+    { header: 'Corretor', key: 'corretor', width: 26 },
+    { header: 'Empresa de Vendas', key: 'empresa', width: 22 },
+    { header: 'Gerente', key: 'gerente', width: 20 },
+    { header: 'Diretor', key: 'diretor', width: 20 },
+    { header: 'Aprovado', key: 'aprovado', width: 14 },
+    { header: 'Nota Material', key: 'notaMaterial', width: 14 },
+    { header: 'Nota Supervisor', key: 'notaSupervisor', width: 16 },
+    { header: 'Nota Satisfação', key: 'notaSatisfacao', width: 16 },
+    { header: 'Resposta Positivo', key: 'positivo', width: 40 },
+    { header: 'Resposta A Melhorar', key: 'melhorar', width: 40 },
+  ];
+  sheet.getRow(1).font = { bold: true };
+
+  for (const r of respostas) {
+    let aprovado = 'Sem prova';
+    if (r.treinamento.temProva) {
+      const foiAprovado = aprovadoPorChave.get(`${r.treinamentoId}-${r.corretorId}`);
+      aprovado = foiAprovado ? 'Aprovado' : 'Reprovado';
+    }
+
+    sheet.addRow({
+      produto: r.treinamento.produto.nome,
+      treinamento: r.treinamento.tema,
+      data: new Date(r.treinamento.data).toLocaleDateString('pt-BR'),
+      hora: r.treinamento.horario,
+      corretor: r.corretor.nome,
+      empresa: r.corretor.empresa?.nome || '-',
+      gerente: r.corretor.gerente || '-',
+      diretor: r.corretor.diretor || '-',
+      aprovado,
+      notaMaterial: r.notaMaterial,
+      notaSupervisor: r.notaSupervisor,
+      notaSatisfacao: r.notaSatisfacao,
+      positivo: r.pontosPositivos || '',
+      melhorar: r.pontosMelhorar || '',
+    });
+  }
+
+  res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+  res.setHeader('Content-Disposition', 'attachment; filename="avaliacoes_nps_academia_tegra.xlsx"');
+
+  await workbook.xlsx.write(res);
+  res.end();
+}
+
+module.exports = { exportarTreinamentos, exportarPresencas, exportarCorretoresAptos, exportarAvaliacoesNps };
